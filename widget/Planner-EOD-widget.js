@@ -124,7 +124,8 @@ function build(data, family) {
   const w = new ListWidget();
   w.backgroundColor = C.bg;
   if (!/^PASTE/.test(PLANNER_URL)) w.url = PLANNER_URL + "#today";
-  w.refreshAfterDate = new Date(Date.now() + 15 * 60 * 1000);
+  // Ask iOS to refresh again after about a minute (iOS still decides the exact timing).
+  w.refreshAfterDate = new Date(Date.now() + 60 * 1000);
   w.setPadding(16, 16, 14, 16);
   if (data.needsSignIn) { message(w, "Open Scriptable and run this script once to sign in."); return w; }
   if (data.error) { message(w, "Can't reach your planner right now."); return w; }
@@ -139,7 +140,10 @@ function build(data, family) {
   head.addSpacer();
   if (list.length) { const c = head.addText(done + " of " + list.length); c.font = Font.semiboldSystemFont(12); c.textColor = C.accent; }
   if (family !== "small") {
-    const d = w.addText(new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }) + (data.stale ? " · offline" : ""));
+    const now = new Date();
+    const when = now.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+    const at = now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    const d = w.addText(when + (data.stale ? " · offline, last saved list" : " · Updated " + at));
     d.font = Font.systemFont(12); d.textColor = C.muted;
   }
   w.addSpacer(8);
