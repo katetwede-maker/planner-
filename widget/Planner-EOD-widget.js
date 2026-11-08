@@ -9,10 +9,12 @@ const PLANNER_URL = "https://katetwede-maker.github.io/planner-/";
 
 // ---- colors (same as the planner) ----
 const C = {
-  bg: new Color("#F2F5EF"), ink: new Color("#26312A"), muted: new Color("#6B786E"),
-  accent: new Color("#5E8261"), sage: new Color("#8DAE89"), check: new Color("#B5C4B1"),
-  danger: new Color("#B0574A"), line: new Color("#DFE6DB")
+  bg: new Color("#F4F4F1"), ink: new Color("#232622"), muted: new Color("#6E716B"),
+  accent: new Color("#1F1F1F"), done: new Color("#1F1F1F"), check: new Color("#C3C4BD"),
+  danger: new Color("#B0574A"), line: new Color("#E3E3DE")
 };
+// each section's color, the same as in the planner
+const SECTION_COLORS = { inbox: "#1F1F1F", react: "#3F78AD", work: "#BF5A17", athletics: "#6847A3", wellness: "#4F7353", michael: "#A51C30" };
 const KC_TOKEN = "kates-planner.refreshToken";
 const KC_UID = "kates-planner.uid";
 const SECTION_NAMES = { inbox: "Today", react: "REAcT", work: "Work", athletics: "Athletics", wellness: "Wellness", michael: "Michael" };
@@ -131,14 +133,14 @@ function buildToday(data) {
 function rightLabel(t) {
   if (!t.done && t.due && t.due < today) return { text: "Overdue", color: C.danger };
   if (!t.done && t.eod && t.eod < today) return { text: "Carried over", color: C.muted };
-  return { text: SECTION_NAMES[t.section] || "", color: C.muted };
+  return { text: SECTION_NAMES[t.section] || "", color: new Color(SECTION_COLORS[t.section] || "#6E716B") };
 }
 
 // ---------- widget ----------
 function addCheck(stack, done, size) {
   const img = stack.addImage(SFSymbol.named(done ? "checkmark.square.fill" : "square").image);
   img.imageSize = new Size(size, size);
-  img.tintColor = done ? C.sage : C.check;
+  img.tintColor = done ? C.done : C.check;
 }
 function message(w, text) {
   w.addSpacer();
@@ -177,7 +179,7 @@ function build(data, family) {
     const row = w.addStack(); row.centerAlignContent(); row.spacing = 6;
     const dot = row.addText("●"); dot.font = Font.systemFont(9); dot.textColor = new Color(train[0].color);
     const tt = row.addText("Training: " + train.map(s => s.name + (s.note ? " (" + s.note + ")" : "") + (s.done ? " ✓" : "")).join(", "));
-    tt.font = Font.mediumSystemFont(12); tt.textColor = C.accent; tt.lineLimit = 1;
+    tt.font = Font.mediumSystemFont(12); tt.textColor = new Color("#6847A3"); tt.lineLimit = 1;
     w.addSpacer(8);
   }
 

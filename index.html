@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Planner">
-<meta name="theme-color" content="#F2F5EF">
+<meta name="theme-color" content="#F4F4F1">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-192.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -18,17 +18,18 @@
 <style>
 :root{
   /* Layout: quiet sidebar of life areas + one calm column of tasks; bottom tab bar on phones */
-  --bg:#F2F5EF;
+  --bg:#F4F4F1;
   --surface:#FFFFFF;
-  --surface-2:#F7F9F5;
-  --ink:#26312A;
-  --muted:#6B786E;
-  --line:#DFE6DB;
+  --surface-2:#F9F9F7;
+  --ink:#232622;
+  --muted:#6E716B;
+  --line:#E3E3DE;
   --accent:#5E8261;
+  --accent-ink:#4F7353;
   --on-accent:#FFFFFF;
   --sage:#8DAE89;
   --sage-soft:#E7EFE4;
-  --check:#B5C4B1;
+  --check:#C3C4BD;
   --danger:#B0574A;
   --danger-soft:#F6E4DF;
   --shadow:0 1px 2px rgba(38,49,42,.04),0 8px 28px rgba(38,49,42,.06);
@@ -48,14 +49,14 @@ svg{display:block}
 .app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
 .side{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;gap:28px;padding:28px 14px 20px;border-right:1px solid var(--line);background:var(--surface-2)}
 .brand{display:flex;align-items:center;gap:10px;padding:0 10px;font-family:var(--font-display);font-size:20px;font-weight:500;letter-spacing:-.01em}
-.brand-mark{width:30px;height:30px;border-radius:50%;background:var(--sage-soft);color:var(--accent);display:grid;place-items:center;flex:none}
+.brand-mark{width:30px;height:30px;border-radius:50%;background:var(--sage-soft);color:var(--accent-ink);display:grid;place-items:center;flex:none}
 .brand-mark svg{width:17px;height:17px}
 .nav-list{display:flex;flex-direction:column;gap:2px}
 .nav-item{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:10px;color:var(--muted);text-decoration:none;font-weight:500;transition:background .15s,color .15s}
-.nav-item svg{width:19px;height:19px;flex:none}
-.nav-item:hover{background:var(--sage-soft);color:var(--ink)}
-.nav-item.active{background:var(--sage-soft);color:var(--accent);font-weight:600}
-.badge{margin-left:auto;font-size:12px;line-height:18px;min-width:22px;padding:0 7px;border-radius:999px;background:var(--accent);color:var(--on-accent);text-align:center;font-variant-numeric:tabular-nums;font-weight:600}
+.nav-item svg{width:19px;height:19px;flex:none;color:var(--c)}
+.nav-item:hover{background:var(--cs);color:var(--ink)}
+.nav-item.active{background:var(--cs);color:var(--c);font-weight:600}
+.badge{margin-left:auto;font-size:12px;line-height:18px;min-width:22px;padding:0 7px;border-radius:999px;background:#1F1F1F;color:#fff;text-align:center;font-variant-numeric:tabular-nums;font-weight:600}
 .side-foot{margin-top:auto;padding:0 12px}
 .status{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:7px;min-height:18px}
 .status::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--sage);flex:none}
@@ -101,8 +102,8 @@ h1{margin:0;font-family:var(--font-display);font-weight:500;font-size:36px;line-
 .link-btn.danger:hover{background:var(--danger-soft);color:var(--danger)}
 .icon-btn{width:30px;height:30px;border-radius:8px;display:grid;place-items:center;color:var(--muted);flex:none;transition:background .12s,color .12s,opacity .12s}
 .icon-btn svg{width:17px;height:17px}
-.icon-btn:hover{background:var(--sage-soft);color:var(--accent)}
-.icon-btn.on{color:var(--accent)}
+.icon-btn:hover{background:var(--sage-soft);color:var(--accent-ink)}
+.icon-btn.on{color:var(--accent-ink)}
 .icon-btn.danger:hover{background:var(--danger-soft);color:var(--danger)}
 .sun-btn.on svg circle{fill:currentColor}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);white-space:nowrap}
@@ -125,7 +126,7 @@ h1{margin:0;font-family:var(--font-display);font-weight:500;font-size:36px;line-
 .check{width:22px;height:22px;flex:none;border:1.6px solid var(--check);border-radius:7px;display:grid;place-items:center;color:transparent;margin-top:1px;transition:background .15s,border-color .15s}
 .check svg{width:14px;height:14px;stroke-width:3}
 .check:hover{border-color:var(--sage)}
-.task.done>.row .check{background:var(--sage);border-color:var(--sage);color:#fff}
+.task.done>.row .check{background:var(--sage);border-color:var(--sage);color:var(--on-accent)}
 .body{flex:1;min-width:0;padding-top:1px}
 .title{cursor:text;overflow-wrap:anywhere;min-height:21px}
 .task.done>.row .title{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--check)}
@@ -134,10 +135,11 @@ h1{margin:0;font-family:var(--font-display);font-weight:500;font-size:36px;line-
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;line-height:1;padding:4px 8px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .chip svg{width:12px;height:12px}
 button.chip:hover{border-color:var(--sage)}
-.chip.today,.chip.sun{background:var(--sage-soft);border-color:transparent;color:var(--accent)}
+.chip.today,.chip.sun{background:var(--sage-soft);border-color:transparent;color:var(--accent-ink)}
 .chip.sun svg circle{fill:currentColor}
 .chip.over{background:var(--danger-soft);border-color:transparent;color:var(--danger)}
 .crumb{font-size:12.5px;color:var(--muted);margin-right:2px}
+.sec-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
 .actions{display:flex;gap:2px;flex:none;margin:-4px -2px -4px 0}
 .actions .icon-btn{opacity:0}
 .row:hover .actions .icon-btn,.row:focus-within .actions .icon-btn,.actions .icon-btn.on{opacity:1}
@@ -152,7 +154,7 @@ button.chip:hover{border-color:var(--sage)}
 .add-row{display:flex;align-items:center;gap:8px;padding:9px 12px 9px 38px;border-top:1px solid var(--line)}
 .list>.add-row:first-child{border-top:0}
 .children .add-row{border-top:0;padding-left:30px}
-.add-plus{color:var(--accent);width:22px;height:22px;display:grid;place-items:center;flex:none}
+.add-plus{color:var(--accent-ink);width:22px;height:22px;display:grid;place-items:center;flex:none}
 .add-plus svg{width:16px;height:16px}
 .add-input{flex:1;min-width:0;border:0;background:transparent;padding:4px 0;outline:none}
 .add-input::placeholder{color:var(--muted);opacity:.85}
@@ -191,7 +193,7 @@ button.chip:hover{border-color:var(--sage)}
 .ov-card{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:14px 16px 10px;display:flex;flex-direction:column;gap:8px;min-width:0}
 .ov-head{display:flex;align-items:baseline;gap:10px}
 .ov-name{font-family:var(--font-display);font-size:20px;font-weight:500;text-align:left;letter-spacing:-.01em;min-width:0;overflow-wrap:anywhere}
-.ov-name:hover{color:var(--accent)}
+.ov-name:hover{color:var(--accent-ink)}
 .ov-count{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .ov-open{margin-left:auto;flex:none}
 .ov-flags{display:flex;gap:6px;flex-wrap:wrap}
@@ -199,7 +201,7 @@ button.chip:hover{border-color:var(--sage)}
 .ov-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
 .ov-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding-top:1px}
 .ov-title{text-align:left;overflow-wrap:anywhere}
-.ov-title:hover{color:var(--accent)}
+.ov-title:hover{color:var(--accent-ink)}
 .ov-row .chip{margin-top:2px}
 .ov-row .icon-btn{margin:-4px -6px -4px -4px}
 .ov-empty{color:var(--muted);font-size:14px;padding:10px 0 4px;border-top:1px solid var(--line);margin:0}
@@ -215,7 +217,7 @@ button.chip:hover{border-color:var(--sage)}
 .day-head{display:flex;align-items:baseline;justify-content:space-between;padding:0 4px 2px}
 .dow{font-size:11.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .dnum{font-family:var(--font-display);font-size:19px;font-variant-numeric:tabular-nums}
-.is-today .dow,.is-today .dnum{color:var(--accent)}
+.is-today .dow,.is-today .dnum{color:var(--accent-ink)}
 .day-sess{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
 .sess{--c:#9AA39C;display:flex;align-items:flex-start;gap:7px;padding:7px 8px;border-radius:9px;background:color-mix(in srgb,var(--c) 15%,var(--surface));border-left:3px solid var(--c);min-width:0}
 .sess-check{width:16px;height:16px;border-radius:50%;border:1.6px solid var(--c);flex:none;margin-top:2px;display:grid;place-items:center;color:transparent}
@@ -226,7 +228,7 @@ button.chip:hover{border-color:var(--sage)}
 .sess-note{font-size:12px;color:var(--muted);overflow-wrap:anywhere;line-height:1.35}
 .sess.done .sess-act,.sess.done .sess-note{text-decoration:line-through;opacity:.7}
 .day-add{display:flex;align-items:center;gap:4px;justify-content:center;font-size:12.5px;color:var(--muted);padding:6px;border-radius:8px;border:1px dashed var(--line)}
-.day-add:hover{color:var(--accent);border-color:var(--sage);background:var(--sage-soft)}
+.day-add:hover{color:var(--accent-ink);border-color:var(--sage);background:var(--sage-soft)}
 .day-add svg{width:14px;height:14px}
 .today-train{display:flex;flex-wrap:wrap;gap:8px}
 .today-train .sess{flex:0 1 240px}
@@ -258,7 +260,7 @@ button.chip:hover{border-color:var(--sage)}
 .dlg-text{margin:8px 0 18px;color:var(--muted)}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;background:var(--surface-2)}
 .seg button{padding:5px 12px;border-radius:7px;font-size:13px;color:var(--muted)}
-.seg button.on{background:var(--surface);color:var(--accent);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.seg button.on{background:var(--surface);color:var(--accent-ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
 .seg-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;font-size:13.5px;color:var(--muted)}
 .grp{--c:#9AA39C;border:1px solid var(--line);border-radius:14px;padding:10px 10px 8px;margin-bottom:10px}
 .grp-head,.act-row{display:flex;align-items:center;gap:8px}
@@ -292,7 +294,7 @@ button.chip:hover{border-color:var(--sage)}
 
 /* toast */
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:12px;display:flex;gap:14px;align-items:center;font-size:14px;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.2);max-width:calc(100% - 32px)}
-.toast button{color:var(--sage);font-weight:700;padding:4px 6px;border-radius:6px}
+.toast button{color:#fff;text-decoration:underline;font-weight:700;padding:4px 6px;border-radius:6px}
 @keyframes fade{from{opacity:0}}
 
 /* ---------- phone ---------- */
@@ -401,6 +403,22 @@ const SECTIONS = [
   { id: 'michael', name: 'Michael', icon: 'heart' }
 ];
 const SEC = Object.fromEntries(SECTIONS.map(s => [s.id, s]));
+// Section colors: accent = fills (buttons, checks, bars), ink = text and icons, soft = light tints
+const THEMES = {
+  today:     { accent: '#1F1F1F', on: '#FFFFFF', ink: '#1F1F1F', soft: '#EBEBE7' },
+  react:     { accent: '#A9CDEB', on: '#1E3A52', ink: '#3F78AD', soft: '#E3EFF9' },
+  work:      { accent: '#E2762F', on: '#FFFFFF', ink: '#BF5A17', soft: '#FBE8DA' },
+  athletics: { accent: '#7D5BB6', on: '#FFFFFF', ink: '#6847A3', soft: '#EEE7F8' },
+  wellness:  { accent: '#5E8261', on: '#FFFFFF', ink: '#4F7353', soft: '#E5EEE2' },
+  michael:   { accent: '#A51C30', on: '#FFFFFF', ink: '#A51C30', soft: '#F8E3E6' }
+};
+const themeOf = sec => THEMES[sec] || THEMES.today;
+function applyTheme(view) {
+  const t = themeOf(view), st = document.documentElement.style;
+  st.setProperty('--accent', t.accent); st.setProperty('--sage', t.accent);
+  st.setProperty('--on-accent', t.on); st.setProperty('--accent-ink', t.ink);
+  st.setProperty('--sage-soft', t.soft);
+}
 const GENERAL = '__general';
 const OVERVIEW = '__overview';
 const PALETTE = ['#5B8DB8','#4FA3A0','#7E9CD8','#8DAE89','#6E9E6B','#C9A44C','#D08B5B','#C77D7D','#A68BC2','#8E8AA8','#9AA39C','#5E6B63'];
@@ -869,6 +887,7 @@ function render() {
   clearTimeout(softTimer);
   rendering = true;
   buildIndex();
+  applyTheme(ui.view);
   renderNav();
   const main = $('#main');
   const v = ui.view;
@@ -895,7 +914,8 @@ function renderNav() {
   const open = todayRoots().filter(t => !t.done).length;
   const items = SECTIONS.map(s => {
     const on = ui.view === s.id;
-    return '<a href="#' + s.id + '" class="nav-item' + (on ? ' active' : '') + '"' + (on ? ' aria-current="page"' : '') + '>' + icon(s.icon) +
+    const th = themeOf(s.id);
+    return '<a href="#' + s.id + '" class="nav-item' + (on ? ' active' : '') + '" style="--c:' + th.ink + ';--cs:' + th.soft + '"' + (on ? ' aria-current="page"' : '') + '>' + icon(s.icon) +
       '<span class="nav-label">' + esc(s.name) + '</span>' + (s.id === 'today' && open ? '<span class="badge">' + open + '</span>' : '') + '</a>';
   }).join('');
   $('#side').innerHTML = '<div class="brand"><span class="brand-mark">' + icon('leaf') + '</span>Kate’s Planner</div><div class="nav-list">' + items + '</div><div class="side-foot"><div class="status"></div><button class="link-btn foot-link" data-action="open-data">Settings &amp; data</button></div>';
@@ -909,7 +929,7 @@ function renderTask(t, depth, opts) {
   const doneKids = ch.filter(c => c.done).length;
   const pinned = !!(t.eod && t.eod <= td);
   const meta = [];
-  if (opts.crumb && depth === 0) meta.push('<span class="crumb">' + esc(crumb(t)) + '</span>');
+  if (opts.crumb && depth === 0) meta.push('<span class="crumb"><span class="sec-dot" style="background:' + themeOf(t.section).accent + '"></span>' + esc(crumb(t)) + '</span>');
   if (ch.length) meta.push('<span class="chip" title="Subtasks done">' + doneKids + '/' + ch.length + '</span>');
   if (t.due) { const d = dueInfo(t.due); meta.push('<button class="chip ' + (t.done ? '' : d.cls) + '" data-action="due" data-id="' + t.id + '" title="Change due date">' + icon('cal') + esc(d.text) + '</button>'); }
   if (t.repeat) meta.push('<button class="chip" data-action="due" data-id="' + t.id + '" title="Change repeat">' + icon('repeat') + esc(repeatLabel(t.repeat)) + '</button>');
@@ -1027,7 +1047,7 @@ function viewToday() {
   if (upcoming.length) {
     h += '<h2 class="sub-h">Coming up this week</h2><section class="up">' + upcoming.map(t => {
       const d = dueInfo(t.due);
-      return '<div class="up-row"><div class="up-main"><span class="up-title">' + esc(t.title) + '</span><span class="crumb">' + esc(crumb(t)) + '</span></div>' +
+      return '<div class="up-row"><div class="up-main"><span class="up-title">' + esc(t.title) + '</span><span class="crumb"><span class="sec-dot" style="background:' + themeOf(t.section).accent + '"></span>' + esc(crumb(t)) + '</span></div>' +
         '<span class="chip">' + icon('cal') + esc(d.text) + '</span>' +
         '<button class="icon-btn sun-btn" style="opacity:1" data-action="pin" data-id="' + t.id + '" title="Do it today" aria-label="Add ' + esc(t.title) + ' to today">' + icon('sun') + '</button></div>';
     }).join('') + '</section>';
