@@ -21,6 +21,22 @@ const SECTION_NAMES = { inbox: "Today", react: "REAcT", work: "Work", athletics:
 const pad = n => String(n).padStart(2, "0");
 const fmt = d => d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
 const today = fmt(new Date());
+const parseDs = ds => { const p = ds.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); };
+const addDays = (ds, n) => { const d = parseDs(ds); d.setDate(d.getDate() + n); return fmt(d); };
+
+// ---------- repeating tasks (same rules as the planner) ----------
+function matchesRepeat(r, ds) {
+  const d = parseDs(ds), wd = d.getDay();
+  if (r.type === "daily") return true;
+  if (r.type === "weekdays") return wd >= 1 && wd <= 5;
+  if (r.type === "weekly") return (r.days || []).includes(wd);
+  if (r.type === "monthly") { const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return d.getDate() === Math.min(r.dom || 1, last); }
+  return false;
+}
+function nextOccurrence(r, fromDs) {
+  for (let i = 0; i < 400; i++) { const ds = addDays(fromDs, i); if (matchesRepeat(r, ds)) return ds; }
+  return null;
+}
 
 // ---------- auth ----------
 async function signInInteractive() {
@@ -84,7 +100,16 @@ async function loadData() {
 
 // ---------- same "By EOD" rules as the planner ----------
 function buildToday(data) {
-  const T = data.tasks;
+  // a repeating task checked off on an earlier day comes back on its next day
+  const T = {};
+  Object.values(data.tasks).forEach(t0 => {
+    let t = t0;
+    if (t.repeat && t.done && t.doneAt && t.doneAt < today) {
+      const base = t.due && t.due > t.doneAt ? t.due : t.doneAt;
+      t = Object.assign({}, t, { done: false, doneAt: null, eod: null, due: nextOccurrence(t.repeat, addDays(base, 1)) });
+    }
+    T[t.id] = t;
+  });
   const onToday = t => {
     const due = (t.eod && t.eod <= today) || (t.due && t.due <= today);
     return t.done ? !!(due && t.doneAt === today) : !!due;

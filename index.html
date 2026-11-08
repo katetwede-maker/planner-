@@ -143,6 +143,10 @@ button.chip:hover{border-color:var(--sage)}
 .row:hover .actions .icon-btn,.row:focus-within .actions .icon-btn,.actions .icon-btn.on{opacity:1}
 @media (hover:none){.actions .icon-btn{opacity:1}}
 .due-menu,.row-menu{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 12px 60px}
+.repeat-row{flex-basis:100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.rep-label{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:600;color:var(--muted);margin-right:2px}
+.rep-label svg{width:14px;height:14px}
+.pill.rep-day{min-width:44px;justify-content:center;padding:6px 8px}
 .children .due-menu,.children .row-menu{padding-top:2px}
 .empty{padding:18px 20px;color:var(--muted);margin:0}
 .add-row{display:flex;align-items:center;gap:8px;padding:9px 12px 9px 38px;border-top:1px solid var(--line)}
@@ -382,6 +386,7 @@ const ICONS = {
   trash: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
   more: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor"/>',
   palette: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.9 1.4-1.9-.5-1.3.4-2.6 1.8-2.6h1.8a3.5 3.5 0 0 0 3.5-3.5c0-5-3.8-9-8.5-9Z"/><circle cx="7.8" cy="11.5" r="1.1"/><circle cx="10.5" cy="7.6" r="1.1"/><circle cx="15" cy="8" r="1.1"/>',
+  repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>'
 };
 const icon = n => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS[n] + '</svg>';
@@ -529,6 +534,7 @@ function markReady() {
   clearTimeout(loadTimer);
   sync.ready = true;
   pruneOld();
+  if (canEdit()) rollRecurring();
   render();
 }
 async function initSync() {
@@ -629,6 +635,64 @@ function statusInfo() {
 function renderStatus() {
   const s = statusInfo();
   document.querySelectorAll('.status').forEach(el => { el.className = 'status ' + s.cls + (el.classList.contains('m-status') ? ' m-status' : ''); el.textContent = s.text; });
+}
+
+/* ================= repeating tasks ================= */
+function matchesRepeat(r, ds) {
+  const d = parse(ds), wd = d.getDay();
+  if (r.type === 'daily') return true;
+  if (r.type === 'weekdays') return wd >= 1 && wd <= 5;
+  if (r.type === 'weekly') return (r.days || []).includes(wd);
+  if (r.type === 'monthly') { const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); return d.getDate() === Math.min(r.dom || 1, last); }
+  return false;
+}
+function nextOccurrence(r, fromDs) {
+  for (let i = 0; i < 400; i++) { const ds = addDays(fromDs, i); if (matchesRepeat(r, ds)) return ds; }
+  return null;
+}
+const ordinal = n => { const sfx = ['th', 'st', 'nd', 'rd'], v = n % 100; return n + (sfx[(v - 20) % 10] || sfx[v] || sfx[0]); };
+function repeatLabel(r) {
+  if (!r) return '';
+  if (r.type === 'daily') return 'Every day';
+  if (r.type === 'weekdays') return 'Weekdays';
+  if (r.type === 'monthly') return 'Monthly on the ' + ordinal(r.dom || 1);
+  const ds = (r.days || []).slice().sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+  if (ds.length === 7) return 'Every day';
+  return 'Every ' + ds.map(d => DOW[d]).join(', ');
+}
+function setRepeat(id, val) {
+  const t = S.tasks[id]; if (!t) return;
+  const td = today();
+  const base = t.due && t.due >= td ? t.due : td;
+  if (!val) { t.repeat = null; queueSave('tasks'); return; }
+  if (val === 'weekly') t.repeat = { type: 'weekly', days: t.repeat && t.repeat.type === 'weekly' ? t.repeat.days : [parse(base).getDay()] };
+  else if (val === 'monthly') t.repeat = { type: 'monthly', dom: parse(base).getDate() };
+  else t.repeat = { type: val };
+  t.due = nextOccurrence(t.repeat, td);
+  t.eod = null;
+  queueSave('tasks');
+}
+function toggleRepeatDay(id, day) {
+  const t = S.tasks[id]; if (!t || !t.repeat || t.repeat.type !== 'weekly') return;
+  const days = new Set(t.repeat.days || []);
+  if (days.has(day)) { if (days.size > 1) days.delete(day); } else days.add(day);
+  t.repeat = { type: 'weekly', days: Array.from(days) };
+  t.due = nextOccurrence(t.repeat, today());
+  queueSave('tasks');
+}
+// The day after a repeating task is checked off, bring it back unchecked on its next day.
+function rollRecurring() {
+  const td = today();
+  let n = 0;
+  Object.values(S.tasks).forEach(t => {
+    if (!t.repeat || !t.done || !t.doneAt || t.doneAt >= td) return;
+    const base = t.due && t.due > t.doneAt ? t.due : t.doneAt;
+    t.due = nextOccurrence(t.repeat, addDays(base, 1));
+    t.done = false; t.doneAt = null; t.eod = null;
+    descendants(t.id).forEach(d => { d.done = false; d.doneAt = null; });
+    n++;
+  });
+  if (n) queueSave('tasks');
 }
 
 /* ================= task logic ================= */
@@ -848,6 +912,7 @@ function renderTask(t, depth, opts) {
   if (opts.crumb && depth === 0) meta.push('<span class="crumb">' + esc(crumb(t)) + '</span>');
   if (ch.length) meta.push('<span class="chip" title="Subtasks done">' + doneKids + '/' + ch.length + '</span>');
   if (t.due) { const d = dueInfo(t.due); meta.push('<button class="chip ' + (t.done ? '' : d.cls) + '" data-action="due" data-id="' + t.id + '" title="Change due date">' + icon('cal') + esc(d.text) + '</button>'); }
+  if (t.repeat) meta.push('<button class="chip" data-action="due" data-id="' + t.id + '" title="Change repeat">' + icon('repeat') + esc(repeatLabel(t.repeat)) + '</button>');
   if (!t.done && t.eod && t.eod < td) meta.push('<span class="chip">Carried over</span>');
   if (pinned && ui.view !== 'today' && !t.done) meta.push('<span class="chip sun">' + icon('sun') + 'On By EOD</span>');
   const title = esc(t.title);
@@ -863,13 +928,13 @@ function renderTask(t, depth, opts) {
   if (meta.length) h += '<div class="meta">' + meta.join('') + '</div>';
   h += '</div><div class="actions">';
   h += '<button class="icon-btn sun-btn' + (pinned ? ' on' : '') + '" data-action="pin" data-id="' + t.id + '" title="' + (pinned ? 'Remove from By EOD' : 'Add to By EOD') + '" aria-label="' + (pinned ? 'Remove from By EOD' : 'Add to By EOD') + '">' + icon('sun') + '</button>';
-  h += '<button class="icon-btn desk-only' + (ui.dueMenu === t.id ? ' on' : '') + '" data-action="due" data-id="' + t.id + '" title="Due date" aria-label="Due date">' + icon('cal') + '</button>';
+  h += '<button class="icon-btn desk-only' + (ui.dueMenu === t.id ? ' on' : '') + '" data-action="due" data-id="' + t.id + '" title="Due date &amp; repeat" aria-label="Due date and repeat">' + icon('cal') + '</button>';
   h += '<button class="icon-btn desk-only" data-action="add-sub" data-id="' + t.id + '" title="Add subtask" aria-label="Add subtask">' + icon('sub') + '</button>';
   h += '<button class="icon-btn desk-only danger" data-action="delete" data-id="' + t.id + '" title="Delete" aria-label="Delete task">' + icon('trash') + '</button>';
   h += '<button class="icon-btn mob-only' + (ui.rowMenu === t.id ? ' on' : '') + '" data-action="more" data-id="' + t.id + '" aria-label="More actions">' + icon('more') + '</button>';
   h += '</div></div>';
   if (ui.rowMenu === t.id) {
-    h += '<div class="row-menu"><button class="pill" data-action="due" data-id="' + t.id + '">' + icon('cal') + 'Due date</button>' +
+    h += '<div class="row-menu"><button class="pill" data-action="due" data-id="' + t.id + '">' + icon('cal') + 'Due date &amp; repeat</button>' +
       '<button class="pill" data-action="add-sub" data-id="' + t.id + '">' + icon('sub') + 'Add subtask</button>' +
       '<button class="pill danger" data-action="delete" data-id="' + t.id + '">' + icon('trash') + 'Delete</button></div>';
   }
@@ -890,7 +955,21 @@ function dueMenu(t) {
     opts.map(o => '<button class="pill' + (t.due === o[1] ? ' on' : '') + '" data-action="set-due" data-id="' + t.id + '" data-val="' + o[1] + '">' + o[0] + '</button>').join('') +
     '<label class="pill">Pick a date <input type="date" data-date-for="' + t.id + '" value="' + (t.due || '') + '" aria-label="Pick a due date"></label>' +
     (t.due ? '<button class="pill" data-action="set-due" data-id="' + t.id + '" data-val="">No due date</button>' : '') +
+    repeatRows(t) +
     '</div>';
+}
+function repeatRows(t) {
+  const r = t.repeat, rt = r ? r.type : '';
+  let h = '<div class="repeat-row" role="group" aria-label="Repeat"><span class="rep-label">' + icon('repeat') + 'Repeat</span>' +
+    [['', 'Never'], ['daily', 'Every day'], ['weekdays', 'Weekdays'], ['weekly', 'Weekly'], ['monthly', 'Monthly']].map(o =>
+      '<button class="pill' + (rt === o[0] ? ' on' : '') + '" data-action="set-repeat" data-id="' + t.id + '" data-val="' + o[0] + '" aria-pressed="' + (rt === o[0]) + '">' + o[1] + '</button>').join('') + '</div>';
+  if (rt === 'weekly') {
+    h += '<div class="repeat-row" role="group" aria-label="Repeat on these days"><span class="rep-label">On</span>' +
+      [1, 2, 3, 4, 5, 6, 0].map(d => { const on = (r.days || []).includes(d);
+        return '<button class="pill rep-day' + (on ? ' on' : '') + '" data-action="repeat-day" data-id="' + t.id + '" data-day="' + d + '" aria-pressed="' + on + '">' + DOW[d] + '</button>'; }).join('') + '</div>';
+  }
+  if (r) h += '<div class="repeat-row"><span class="rep-label" style="font-weight:500">' + esc(repeatLabel(r)) + (t.due ? ' \u00b7 next: ' + esc(dueInfo(t.due).text) : '') + '</span></div>';
+  return h;
 }
 function renderList(sec, subtab, placeholder) {
   const rs = sortTasks(rootsOf(sec, subtab));
@@ -1209,7 +1288,9 @@ document.addEventListener('click', e => {
     }
     case 'pin': togglePin(id); break;
     case 'due': ui.dueMenu = ui.dueMenu === id ? null : id; ui.rowMenu = null; break;
-    case 'set-due': { const t = S.tasks[id]; if (t) { t.due = el.dataset.val || null; queueSave('tasks'); } ui.dueMenu = null; break; }
+    case 'set-due': { const t = S.tasks[id]; if (t) { t.due = el.dataset.val || null; if (!t.due) t.repeat = null; queueSave('tasks'); } ui.dueMenu = null; break; }
+    case 'set-repeat': setRepeat(id, el.dataset.val); break;
+    case 'repeat-day': toggleRepeatDay(id, Number(el.dataset.day)); break;
     case 'edit': ui.editing = id; ui.focus = '#edit-' + id; break;
     case 'collapse': if (ui.prefs.collapsed[id]) delete ui.prefs.collapsed[id]; else ui.prefs.collapsed[id] = 1; savePrefs(); break;
     case 'add-sub': ui.addSub = id; delete ui.prefs.collapsed[id]; savePrefs(); ui.rowMenu = null; ui.focus = '#sub-input'; break;
@@ -1418,6 +1499,7 @@ function checkDay() {
   if (td === lastDay) return;
   if (ui.weekStart === mondayOf(lastDay)) ui.weekStart = mondayOf(td);
   lastDay = td;
+  if (canEdit()) rollRecurring();
   render();
 }
 setInterval(checkDay, 60000);
