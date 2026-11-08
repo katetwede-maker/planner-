@@ -350,6 +350,8 @@ const FIREBASE_CONFIG = {
   appId: "1:884632077827:web:fc4c76e7d0cc61bf44b036"
 };
 const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
+/* Bump together with version.json on every update so open copies reload themselves. */
+const APP_VERSION = '2026-11-08.5';
 (function () {
 'use strict';
 
@@ -554,6 +556,7 @@ function markReady() {
   pruneOld();
   if (canEdit()) rollRecurring();
   render();
+  setTimeout(checkForUpdate, 1500);
 }
 async function initSync() {
   if (!fbConfigured) { sync.mode = 'local'; markReady(); return; }
@@ -1523,7 +1526,31 @@ function checkDay() {
   render();
 }
 setInterval(checkDay, 60000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDay(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkDay(); checkForUpdate(); } });
+
+/* ---- auto-update: reload when a newer version has been published ---- */
+let updateChecking = false;
+async function checkForUpdate() {
+  if (updateChecking || !navigator.onLine) return;
+  updateChecking = true;
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || !j.v || j.v === APP_VERSION) return;
+    let tried = null;
+    try { tried = sessionStorage.getItem('kp-update-tried'); } catch (e) {}
+    if (tried === j.v) return;
+    if (DOCS.some(w => sync.dirty[w] || sync.pending[w] > 0)) { setTimeout(checkForUpdate, 2000); return; }
+    try { sessionStorage.setItem('kp-update-tried', j.v); } catch (e) {}
+    const base = location.href.split('#')[0].split('?')[0];
+    const urls = base.endsWith('/') ? [base, base + 'index.html'] : [base];
+    await Promise.all(urls.map(u => fetch(u, { cache: 'reload' }).catch(() => null)));
+    location.reload();
+  } catch (e) {
+  } finally { updateChecking = false; }
+}
+setInterval(checkForUpdate, 30 * 60 * 1000);
 
 /* ================= start ================= */
 ui.view = SEC[location.hash.replace('#', '')] ? location.hash.replace('#', '') : 'today';
