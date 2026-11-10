@@ -126,8 +126,10 @@ function buildToday(data) {
     .sort((a, b) => (a.done - b.done) || (late(b) - late(a)) || (a.order - b.order));
   const acts = {};
   ((data.config && data.config.activities) || []).forEach(a => { acts[a.id] = a; });
-  const train = Object.values(data.training).filter(s => s.date === today).sort((a, b) => a.order - b.order)
-    .map(s => ({ name: acts[s.act] ? acts[s.act].name : "Workout", note: s.note || "", done: !!s.done, color: acts[s.act] ? acts[s.act].color : "#9AA39C" }));
+  const fmtTime = tm => { if (!tm) return ""; const p = tm.split(":").map(Number); return (p[0] % 12 || 12) + ":" + pad(p[1] || 0) + (p[0] < 12 ? " AM" : " PM"); };
+  const train = Object.values(data.training).filter(s => s.date === today)
+    .sort((a, b) => ((a.time ? 0 : 1) - (b.time ? 0 : 1)) || (a.time || "").localeCompare(b.time || "") || ((a.order || 0) - (b.order || 0)))
+    .map(s => ({ name: (acts[s.act] ? acts[s.act].name : "Workout") + (s.time ? " " + fmtTime(s.time) : ""), note: s.note || "", done: !!s.done, color: acts[s.act] ? acts[s.act].color : "#9AA39C" }));
   return { list, train };
 }
 function rightLabel(t) {

@@ -158,7 +158,15 @@ button.chip:hover{border-color:var(--sage)}
 .add-plus svg{width:16px;height:16px}
 .add-input{flex:1;min-width:0;border:0;background:transparent;padding:4px 0;outline:none}
 .add-input::placeholder{color:var(--muted);opacity:.85}
-.list-foot{display:flex;justify-content:flex-end;margin-top:8px}
+.list-foot{display:flex;align-items:center;gap:8px;margin-top:12px}
+.list-sec{margin-top:22px}
+.sec-head{display:flex;align-items:center;gap:8px;margin:0 0 8px;min-height:32px}
+.sec-head h3{margin:0;font-family:var(--font-display);font-weight:500;font-size:19px;letter-spacing:-.005em;overflow-wrap:anywhere}
+.sec-count{font-size:12.5px;color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.sec-tools{margin-left:auto;display:flex;gap:2px;flex:none}
+.sec-rename{font-size:19px;width:min(320px,100%)}
+.sec-new{display:inline-flex}
+.move-menu .select{max-width:100%}
 
 /* quick add on By EOD */
 .quick{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px 8px 8px 14px;box-shadow:var(--shadow)}
@@ -225,6 +233,9 @@ button.chip:hover{border-color:var(--sage)}
 .sess.done .sess-check{background:var(--c);color:#fff}
 .sess-body{text-align:left;min-width:0;flex:1;display:flex;flex-direction:column;gap:1px}
 .sess-act{font-size:13px;font-weight:600;line-height:1.3}
+.sess-time{font-size:11.5px;font-weight:600;line-height:1.3;color:color-mix(in srgb,var(--c) 65%,var(--ink));font-variant-numeric:tabular-nums}
+.sess-rep svg{display:inline-block;width:11px;height:11px;margin-left:4px;vertical-align:-1px;opacity:.55}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .sess-note{font-size:12px;color:var(--muted);overflow-wrap:anywhere;line-height:1.35}
 .sess.done .sess-act,.sess.done .sess-note{text-decoration:line-through;opacity:.7}
 .day-add{display:flex;align-items:center;gap:4px;justify-content:center;font-size:12.5px;color:var(--muted);padding:6px;border-radius:8px;border:1px dashed var(--line)}
@@ -351,7 +362,7 @@ const FIREBASE_CONFIG = {
 };
 const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
 /* Bump together with version.json on every update so open copies reload themselves. */
-const APP_VERSION = '2026-11-08.5';
+const APP_VERSION = '2026-11-10.1';
 (function () {
 'use strict';
 
@@ -388,6 +399,7 @@ const ICONS = {
   cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
   sub: '<path d="M5 4v8a3 3 0 0 0 3 3h11"/><path d="M15 11l4 4-4 4"/>',
   trash: '<path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13"/>',
+  move: '<path d="M4 12h13"/><path d="M13 6l6 6-6 6"/>',
   more: '<circle cx="5.5" cy="12" r="1.4" fill="currentColor"/><circle cx="12" cy="12" r="1.4" fill="currentColor"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor"/>',
   palette: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.2 0 1.8-.9 1.4-1.9-.5-1.3.4-2.6 1.8-2.6h1.8a3.5 3.5 0 0 0 3.5-3.5c0-5-3.8-9-8.5-9Z"/><circle cx="7.8" cy="11.5" r="1.1"/><circle cx="10.5" cy="7.6" r="1.1"/><circle cx="15" cy="8" r="1.1"/>',
   repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/>',
@@ -453,7 +465,8 @@ function normalizeConfig(c) {
     subtabs: { react: Array.isArray(sub.react) ? sub.react : [], work: Array.isArray(sub.work) ? sub.work : [], wellness: Array.isArray(sub.wellness) ? sub.wellness : [] },
     groups: Array.isArray(c.groups) ? c.groups : d.groups,
     activities: Array.isArray(c.activities) ? c.activities : d.activities,
-    colorBy: c.colorBy === 'group' ? 'group' : 'activity'
+    colorBy: c.colorBy === 'group' ? 'group' : 'activity',
+    lists: c.lists && typeof c.lists === 'object' && !Array.isArray(c.lists) ? c.lists : {}
   };
 }
 
@@ -462,7 +475,7 @@ const LS_PREFS = 'kates-planner:prefs';
 function lsGet(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
 function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
 
-let S = { config: defaultConfig(), tasks: {}, training: {} };
+let S = { config: defaultConfig(), tasks: {}, training: {}, series: {} };
 const localHad = { config: false, tasks: false, training: false };
 (function loadLocal() {
   const c = lsGet(LS_DATA);
@@ -470,6 +483,7 @@ const localHad = { config: false, tasks: false, training: false };
   if (c.config) { S.config = normalizeConfig(c.config); localHad.config = true; }
   if (c.tasks && typeof c.tasks === 'object') { S.tasks = c.tasks; localHad.tasks = Object.keys(c.tasks).length > 0; }
   if (c.training && typeof c.training === 'object') { S.training = c.training; localHad.training = Object.keys(c.training).length > 0; }
+  if (c.series && typeof c.series === 'object') { S.series = c.series; if (Object.keys(c.series).length) localHad.training = true; }
 })();
 const saveLocal = () => lsSet(LS_DATA, S);
 
@@ -493,12 +507,15 @@ const fbConfigured = !!(FIREBASE_CONFIG.apiKey && !/^PASTE/.test(FIREBASE_CONFIG
 function docBody(w) {
   if (w === 'config') return S.config;
   if (w === 'tasks') return { items: S.tasks };
-  return { items: S.training };
+  return { items: S.training, series: S.series };
 }
 function applyDoc(w, d) {
   if (w === 'config') S.config = normalizeConfig(d);
   else if (w === 'tasks') S.tasks = d.items && typeof d.items === 'object' ? d.items : {};
-  else S.training = d.items && typeof d.items === 'object' ? d.items : {};
+  else {
+    S.training = d.items && typeof d.items === 'object' ? d.items : {};
+    S.series = d.series && typeof d.series === 'object' ? d.series : {};
+  }
 }
 function queueSave() {
   const ws = Array.from(arguments);
@@ -554,7 +571,7 @@ function markReady() {
   clearTimeout(loadTimer);
   sync.ready = true;
   pruneOld();
-  if (canEdit()) rollRecurring();
+  if (canEdit()) { rollRecurring(); ensureSeries(); }
   render();
   setTimeout(checkForUpdate, 1500);
 }
@@ -620,7 +637,7 @@ async function doReset(email) {
 async function doSignOut() {
   stopCloud();
   try { localStorage.removeItem(LS_DATA); } catch (e) {}
-  S = { config: defaultConfig(), tasks: {}, training: {} };
+  S = { config: defaultConfig(), tasks: {}, training: {}, series: {} };
   ui.modal = null;
   if (fb) await FB.signOut(fb.auth);
 }
@@ -738,6 +755,53 @@ function rootsOf(sec, subtab) {
   return Object.values(S.tasks).filter(t => (!t.parent || !S.tasks[t.parent]) && t.section === sec && (t.subtab || null) === (subtab || null));
 }
 function findTab(sec, id) { return (S.config.subtabs[sec] || []).find(t => t.id === id) || null; }
+/* sections inside a sub-tab (or inside a section's General list) */
+const listKey = (sec, subtab) => sec + ':' + (subtab || GENERAL);
+const listsOf = (sec, subtab) => (S.config.lists && S.config.lists[listKey(sec, subtab)]) || [];
+function rootOf(t) { let r = t, g = 0; while (r.parent && S.tasks[r.parent] && g++ < 60) r = S.tasks[r.parent]; return r; }
+function listNameOf(t) {
+  const r = rootOf(t);
+  if (!r.list) return '';
+  const l = listsOf(r.section, r.subtab).find(x => x.id === r.list);
+  return l ? l.name : '';
+}
+function moveTargets() {
+  const out = [{ group: 'By EOD', value: 'inbox||', label: 'Just today', full: 'Just today' }];
+  ['react', 'work', 'wellness', 'athletics', 'michael'].forEach(sec => {
+    const name = SEC[sec].name, tabs = S.config.subtabs[sec] || [];
+    const addLists = (sub, base) => listsOf(sec, sub).forEach(l => out.push({ group: name, value: sec + '|' + (sub || '') + '|' + l.id, label: ' ' + l.name, full: base + ' › ' + l.name }));
+    const genLabel = sec === 'athletics' ? 'To-dos' : tabs.length ? 'General' : name;
+    out.push({ group: name, value: sec + '||', label: genLabel, full: tabs.length || sec === 'athletics' ? name + ' › ' + genLabel : name });
+    addLists(null, tabs.length ? name + ' › General' : name);
+    tabs.forEach(t => { out.push({ group: name, value: sec + '|' + t.id + '|', label: t.name, full: name + ' › ' + t.name }); addLists(t.id, name + ' › ' + t.name); });
+  });
+  return out;
+}
+function moveTask(id, dest) {
+  const t = S.tasks[id]; if (!t || !dest) return;
+  const parts = dest.split('|');
+  const kids = descendants(id);
+  const before = [t].concat(kids).map(x => clone(x));
+  t.section = parts[0]; t.subtab = parts[1] || null; t.list = parts[2] || null; t.parent = null;
+  kids.forEach(d => { d.section = t.section; d.subtab = t.subtab; });
+  queueSave('tasks');
+  const target = moveTargets().find(o => o.value === dest);
+  toast('Moved to ' + (target ? target.full : 'its new place'), () => { before.forEach(x => { S.tasks[x.id] = x; }); queueSave('tasks'); });
+}
+function commitNewSec(key, v) {
+  v = String(v || '').trim();
+  ui.addingSec = null;
+  if (!v || !key) return;
+  S.config.lists = S.config.lists || {};
+  (S.config.lists[key] = S.config.lists[key] || []).push({ id: 'l' + uid(), name: v });
+  queueSave('config');
+}
+function commitRenameSec(key, id, v) {
+  v = String(v || '').trim();
+  ui.renamingSec = null;
+  const l = ((S.config.lists || {})[key] || []).find(x => x.id === id);
+  if (l && v && v !== l.name) { l.name = v; queueSave('config'); }
+}
 function isOnToday(t, td) {
   const due = (t.eod && t.eod <= td) || (t.due && t.due <= td);
   return t.done ? !!(due && t.doneAt === td) : !!due;
@@ -760,6 +824,7 @@ function crumb(t) {
   else {
     parts.push(SEC[t.section] ? SEC[t.section].name : '');
     if (t.subtab) { const tab = findTab(t.section, t.subtab); if (tab) parts.push(tab.name); }
+    const ln = listNameOf(t); if (ln) parts.push(ln);
   }
   const anc = [];
   let p = t.parent && S.tasks[t.parent], g = 0;
@@ -778,7 +843,7 @@ function dueInfo(due) {
 function addTask(title, o) {
   title = String(title || '').trim();
   if (!title) return null;
-  const t = { id: uid(), title, done: false, doneAt: null, parent: o.parent || null, section: o.section, subtab: o.subtab || null, due: o.due || null, eod: o.eod || null, order: Date.now() };
+  const t = { id: uid(), title, done: false, doneAt: null, parent: o.parent || null, section: o.section, subtab: o.subtab || null, list: o.list || null, due: o.due || null, eod: o.eod || null, order: Date.now() };
   S.tasks[t.id] = t;
   queueSave('tasks');
   return t;
@@ -837,28 +902,101 @@ function colorOfAct(actId) {
   if (S.config.colorBy === 'group') { const g = grpById(a.group); if (g) return g.color; }
   return a.color;
 }
-const sessionsOn = d => Object.values(S.training).filter(s => s.date === d).sort((a, b) => a.order - b.order);
+const sessionsOn = d => Object.values(S.training).filter(s => s.date === d)
+  .sort((a, b) => ((a.time ? 0 : 1) - (b.time ? 0 : 1)) || (a.time || '').localeCompare(b.time || '') || ((a.order || 0) - (b.order || 0)));
+function fmtTime(t) {
+  if (!t) return '';
+  const p = t.split(':').map(Number);
+  const h = p[0] % 12 || 12;
+  return h + ':' + pad(p[1] || 0) + ' ' + (p[0] < 12 ? 'AM' : 'PM');
+}
+/* Repeating workouts: a series makes one workout per matching day, about 8 weeks ahead.
+   Ids are seriesId_date, so two devices never make duplicates; `through` stops deleted days coming back. */
+function ensureSeries(until) {
+  const base = addDays(today(), 56);
+  const horizon = until && until > base ? until : base;
+  let n = 0;
+  Object.values(S.series).forEach(sr => {
+    if (!sr || !sr.repeat || !sr.start) return;
+    const end = sr.until && sr.until < horizon ? sr.until : horizon;
+    let d = sr.through ? addDays(sr.through, 1) : sr.start;
+    if (d < sr.start) d = sr.start;
+    if (d > end) return;
+    for (let i = 0; d <= end && i < 800; i++, d = addDays(d, 1)) {
+      if (!matchesRepeat(sr.repeat, d)) continue;
+      const id = sr.id + '_' + d;
+      if (!S.training[id]) S.training[id] = { id, date: d, act: sr.act, note: sr.note || '', time: sr.time || '', done: false, order: sr.order || 0, series: sr.id };
+    }
+    sr.through = end; n++;
+  });
+  if (n) queueSave('training');
+}
+function createSeries(o) {
+  const sr = { id: 'sr' + uid(), act: o.act, note: o.note || '', time: o.time || '', repeat: o.repeat, start: o.start, until: null, through: null, order: Date.now() };
+  S.series[sr.id] = sr;
+  ensureSeries(addDays(o.start > today() ? o.start : today(), 56));
+  return sr;
+}
+function endSeries(sr, fromDate) {
+  sr.until = addDays(fromDate, -1);
+  Object.values(S.training).forEach(x => { if (x.series === sr.id && x.date >= fromDate && !x.done) delete S.training[x.id]; });
+  if (sr.until < sr.start) delete S.series[sr.id];
+}
+function addSingle(date, act, note, time) {
+  const x = { id: uid(), date, act, note, time, done: false, order: Date.now() };
+  S.training[x.id] = x;
+}
 function copyWeek() {
   const prev = addDays(ui.weekStart, -7);
   const made = [];
-  Object.values(S.training).filter(s => s.date >= prev && s.date < ui.weekStart).forEach((s, i) => {
-    const n = { id: uid() + i, date: addDays(s.date, 7), act: s.act, note: s.note || '', done: false, order: (s.order || 0) + 1 };
+  Object.values(S.training).filter(s => !s.series && s.date >= prev && s.date < ui.weekStart).forEach((s, i) => {
+    const n = { id: uid() + i, date: addDays(s.date, 7), act: s.act, note: s.note || '', time: s.time || '', done: false, order: (s.order || 0) + 1 };
     S.training[n.id] = n; made.push(n.id);
   });
   queueSave('training');
   toast('Copied ' + plural(made.length, 'workout') + ' from last week', () => { made.forEach(id => delete S.training[id]); queueSave('training'); });
 }
+function captureSess() {
+  const m = ui.modal; if (!m) return;
+  const n = $('#sess-note'), d = $('#sess-date'), t = $('#sess-time');
+  if (n) m.note = n.value;
+  if (d && d.value) m.date = d.value;
+  if (t) m.time = t.value;
+}
 function saveSession() {
   const m = ui.modal; if (!m || !m.act) return;
-  const noteEl = $('#sess-note'), dateEl = $('#sess-date');
-  const note = (noteEl ? noteEl.value : m.note || '').trim();
-  const date = (dateEl && dateEl.value) || m.date;
-  if (m.id && S.training[m.id]) Object.assign(S.training[m.id], { act: m.act, note, date });
-  else { const s = { id: uid(), date, act: m.act, note, done: false, order: Date.now() }; S.training[s.id] = s; }
+  captureSess();
+  const note = (m.note || '').trim(), date = m.date, time = m.time || '';
+  const rep = m.repeat && (m.repeat.type !== 'weekly' || (m.repeat.days || []).length) ? clone(m.repeat) : null;
+  const s = m.id ? S.training[m.id] : null;
+  const sr = s && s.series ? S.series[s.series] : null;
+  if (s && sr && m.scope === 'future') {
+    endSeries(sr, s.date);
+    if (rep) createSeries({ act: m.act, note, time, repeat: rep, start: date });
+    else addSingle(date, m.act, note, time);
+  } else if (s && !sr && rep) {
+    delete S.training[s.id];
+    createSeries({ act: m.act, note, time, repeat: rep, start: date });
+  } else if (s) {
+    Object.assign(s, { act: m.act, note, date, time });
+  } else if (rep) {
+    createSeries({ act: m.act, note, time, repeat: rep, start: date });
+  } else {
+    addSingle(date, m.act, note, time);
+  }
   ui.prefs.lastAct = m.act; savePrefs();
   queueSave('training');
   ui.modal = null;
   if (ui.view === 'athletics' && (date < ui.weekStart || date > addDays(ui.weekStart, 6))) ui.weekStart = mondayOf(date);
+}
+function sessRepeatRows(m) {
+  const r = m.repeat, rt = r ? r.type : '';
+  let h = '<div class="field"><span class="label">Repeat</span><div class="act-pills">' +
+    [['', 'Doesn’t repeat'], ['daily', 'Every day'], ['weekdays', 'Weekdays'], ['weekly', 'Weekly']].map(o =>
+      '<button type="button" class="pill' + (rt === o[0] ? ' on' : '') + '" data-action="sess-rep" data-val="' + o[0] + '" aria-pressed="' + (rt === o[0]) + '">' + o[1] + '</button>').join('') + '</div>';
+  if (rt === 'weekly') h += '<div class="act-pills" style="margin-top:6px" role="group" aria-label="Repeat on these days">' + [1, 2, 3, 4, 5, 6, 0].map(d => { const on = (r.days || []).includes(d);
+    return '<button type="button" class="pill rep-day' + (on ? ' on' : '') + '" data-action="sess-rep-day" data-day="' + d + '" aria-pressed="' + on + '">' + DOW[d] + '</button>'; }).join('') + '</div>';
+  return h + '</div>';
 }
 function setColor(kind, id, c) {
   const item = kind === 'group' ? grpById(id) : actById(id);
@@ -953,15 +1091,26 @@ function renderTask(t, depth, opts) {
   h += '<button class="icon-btn sun-btn' + (pinned ? ' on' : '') + '" data-action="pin" data-id="' + t.id + '" title="' + (pinned ? 'Remove from By EOD' : 'Add to By EOD') + '" aria-label="' + (pinned ? 'Remove from By EOD' : 'Add to By EOD') + '">' + icon('sun') + '</button>';
   h += '<button class="icon-btn desk-only' + (ui.dueMenu === t.id ? ' on' : '') + '" data-action="due" data-id="' + t.id + '" title="Due date &amp; repeat" aria-label="Due date and repeat">' + icon('cal') + '</button>';
   h += '<button class="icon-btn desk-only" data-action="add-sub" data-id="' + t.id + '" title="Add subtask" aria-label="Add subtask">' + icon('sub') + '</button>';
+  h += '<button class="icon-btn desk-only' + (ui.moveMenu === t.id ? ' on' : '') + '" data-action="move" data-id="' + t.id + '" title="Move to…" aria-label="Move task">' + icon('move') + '</button>';
   h += '<button class="icon-btn desk-only danger" data-action="delete" data-id="' + t.id + '" title="Delete" aria-label="Delete task">' + icon('trash') + '</button>';
   h += '<button class="icon-btn mob-only' + (ui.rowMenu === t.id ? ' on' : '') + '" data-action="more" data-id="' + t.id + '" aria-label="More actions">' + icon('more') + '</button>';
   h += '</div></div>';
   if (ui.rowMenu === t.id) {
     h += '<div class="row-menu"><button class="pill" data-action="due" data-id="' + t.id + '">' + icon('cal') + 'Due date &amp; repeat</button>' +
       '<button class="pill" data-action="add-sub" data-id="' + t.id + '">' + icon('sub') + 'Add subtask</button>' +
+      '<button class="pill" data-action="move" data-id="' + t.id + '">' + icon('move') + 'Move to…</button>' +
       '<button class="pill danger" data-action="delete" data-id="' + t.id + '">' + icon('trash') + 'Delete</button></div>';
   }
   if (ui.dueMenu === t.id) h += dueMenu(t);
+  if (ui.moveMenu === t.id) {
+    let opts = '<option value="" selected disabled>Choose where…</option>', grp = null;
+    moveTargets().forEach(o => {
+      if (o.group !== grp) { opts += (grp ? '</optgroup>' : '') + '<optgroup label="' + esc(o.group) + '">'; grp = o.group; }
+      opts += '<option value="' + esc(o.value) + '">' + esc(o.label) + '</option>';
+    });
+    h += '<div class="due-menu move-menu"><span class="rep-label">' + icon('move') + 'Move to</span><select class="select" data-move-for="' + t.id + '" aria-label="Move this task to">' + opts + '</optgroup></select>' +
+      (t.parent ? '<span class="rep-label" style="font-weight:500">It will become its own task there, with its subtasks.</span>' : '') + '</div>';
+  }
   const showKids = ch.length && !collapsed;
   if (showKids || ui.addSub === t.id) {
     h += '<div class="children">';
@@ -995,13 +1144,37 @@ function repeatRows(t) {
   return h;
 }
 function renderList(sec, subtab, placeholder) {
-  const rs = sortTasks(rootsOf(sec, subtab));
-  const anyDone = rs.some(t => t.done || descendants(t.id).some(d => d.done));
-  let h = '<section class="list">';
-  h += rs.map(t => renderTask(t, 0, {})).join('');
-  h += '<form class="add-row" data-form="add" data-section="' + sec + '" data-subtab="' + (subtab || '') + '"><span class="add-plus">' + icon('plus') + '</span><input id="add-input" class="add-input" placeholder="' + esc(placeholder || 'Add a task') + '" autocomplete="off" aria-label="New task"></form>';
-  h += '</section>';
-  if (anyDone) h += '<div class="list-foot"><button class="link-btn" data-action="clear-done" data-section="' + sec + '" data-subtab="' + (subtab || '') + '">Clear completed</button></div>';
+  const key = listKey(sec, subtab);
+  const lists = listsOf(sec, subtab);
+  const ids = new Set(lists.map(l => l.id));
+  const all = sortTasks(rootsOf(sec, subtab));
+  const loose = all.filter(t => !t.list || !ids.has(t.list));
+  const anyDone = all.some(t => t.done || descendants(t.id).some(d => d.done));
+  const addForm = (listId, ph) => '<form class="add-row" data-form="add" data-section="' + sec + '" data-subtab="' + (subtab || '') + '" data-list="' + (listId || '') + '"><span class="add-plus">' + icon('plus') + '</span>' +
+    '<input id="add-input' + (listId ? '-' + listId : '') + '" class="add-input" placeholder="' + esc(ph) + '" autocomplete="off" aria-label="New task"></form>';
+  let h = '';
+  if (loose.length || !lists.length) h += '<section class="list">' + loose.map(t => renderTask(t, 0, {})).join('') + addForm(null, placeholder || 'Add a task') + '</section>';
+  const collapsedSec = ui.prefs.collapsedSec || {};
+  lists.forEach(l => {
+    const ts = all.filter(t => t.list === l.id);
+    const open = ts.filter(t => !t.done).length;
+    const col = !!collapsedSec[l.id];
+    h += '<section class="list-sec" aria-label="' + esc(l.name) + '">';
+    if (ui.renamingSec === l.id) {
+      h += '<form class="sec-head" data-form="rename-sec" data-sec="' + l.id + '" data-key="' + key + '"><input id="rename-sec-input" class="rename-input sec-rename" value="' + esc(l.name) + '" aria-label="Section name" autocomplete="off"></form>';
+    } else {
+      h += '<div class="sec-head"><button class="twisty' + (col ? '' : ' open') + '" data-action="collapse-sec" data-sec="' + l.id + '" aria-expanded="' + !col + '" aria-label="' + (col ? 'Show' : 'Hide') + ' ' + esc(l.name) + '">' + icon('chev') + '</button>' +
+        '<h3>' + esc(l.name) + '</h3><span class="sec-count">' + open + ' open</span>' +
+        '<div class="sec-tools"><button class="link-btn" data-action="rename-sec" data-sec="' + l.id + '">Rename</button><button class="link-btn danger" data-action="delete-sec" data-sec="' + l.id + '" data-key="' + key + '">Delete</button></div></div>';
+    }
+    if (!col) h += '<section class="list">' + ts.map(t => renderTask(t, 0, {})).join('') + addForm(l.id, 'Add a task to ' + l.name) + '</section>';
+    h += '</section>';
+  });
+  h += '<div class="list-foot">' + (ui.addingSec === key
+      ? '<form class="sec-new" data-form="new-sec" data-key="' + key + '"><input id="new-sec-input" class="tab-input" placeholder="Section name, e.g. Data pull" aria-label="New section name" autocomplete="off"></form>'
+      : '<button class="btn ghost small" data-action="new-sec" data-key="' + key + '">' + icon('plus') + 'Add a section</button>') +
+    '<span class="grow"></span>' +
+    (anyDone ? '<button class="link-btn" data-action="clear-done" data-section="' + sec + '" data-subtab="' + (subtab || '') + '">Clear completed</button>' : '') + '</div>';
   return h;
 }
 
@@ -1012,7 +1185,11 @@ function quickTargets() {
     const name = SEC[sec].name;
     const tabs = S.config.subtabs[sec] || [];
     out.push([sec + '|', tabs.length ? name + ' › General' : name]);
-    tabs.forEach(t => out.push([sec + '|' + t.id, name + ' › ' + t.name]));
+    listsOf(sec, null).forEach(l => out.push([sec + '||' + l.id, (tabs.length ? name + ' › General' : name) + ' › ' + l.name]));
+    tabs.forEach(t => {
+      out.push([sec + '|' + t.id, name + ' › ' + t.name]);
+      listsOf(sec, t.id).forEach(l => out.push([sec + '|' + t.id + '|' + l.id, name + ' › ' + t.name + ' › ' + l.name]));
+    });
   });
   return out;
 }
@@ -1021,7 +1198,9 @@ function sessChip(s) {
   const name = a ? a.name : 'Removed activity';
   return '<div class="sess' + (s.done ? ' done' : '') + '" style="--c:' + colorOfAct(s.act) + '">' +
     '<button class="sess-check" role="checkbox" aria-checked="' + !!s.done + '" data-action="sess-done" data-id="' + s.id + '" aria-label="' + esc(name + (s.note ? ', ' + s.note : '')) + '">' + icon('check') + '</button>' +
-    '<button class="sess-body" data-action="sess-edit" data-id="' + s.id + '" aria-label="Edit ' + esc(name) + '"><span class="sess-act">' + esc(name) + '</span>' + (s.note ? '<span class="sess-note">' + esc(s.note) + '</span>' : '') + '</button></div>';
+    '<button class="sess-body" data-action="sess-edit" data-id="' + s.id + '" aria-label="Edit ' + esc(name) + '">' + (s.time ? '<span class="sess-time">' + fmtTime(s.time) + '</span>' : '') +
+    '<span class="sess-act">' + esc(name) + (s.series && S.series[s.series] ? '<span class="sess-rep" title="' + esc(repeatLabel(S.series[s.series].repeat)) + '">' + icon('repeat') + '</span>' : '') + '</span>' +
+    (s.note ? '<span class="sess-note">' + esc(s.note) + '</span>' : '') + '</button></div>';
 }
 function viewToday() {
   const td = today();
@@ -1101,7 +1280,7 @@ function viewOverview(sec, st) {
     if (!shown.length) card += '<p class="ov-empty">No open tasks.</p>';
     else card += '<div class="ov-list">' + shown.map(t => {
       const pinned = !!(t.eod && t.eod <= td);
-      const anc = ancestorText(t);
+      const anc = [listNameOf(t), ancestorText(t)].filter(Boolean).join(' \u203A ');
       const d = t.due ? dueInfo(t.due) : null;
       return '<div class="ov-row"><button class="check" role="checkbox" aria-checked="false" data-action="ov-done" data-id="' + t.id + '" aria-label="' + esc(t.title) + '">' + icon('check') + '</button>' +
         '<div class="ov-body"><button class="ov-title" data-action="tab" data-tab="' + c.id + '">' + esc(t.title) + '</button>' + (anc ? '<span class="crumb">in ' + esc(anc) + '</span>' : '') + '</div>' +
@@ -1156,7 +1335,8 @@ function viewAthletics() {
     ? MON[a.getMonth()] + ' ' + a.getDate() + '–' + b.getDate()
     : MON[a.getMonth()] + ' ' + a.getDate() + ' – ' + MON[b.getMonth()] + ' ' + b.getDate();
   const weekSess = Object.values(S.training).filter(s => s.date >= ws && s.date <= we);
-  const prevHas = Object.values(S.training).some(s => s.date >= addDays(ws, -7) && s.date < ws);
+  const prevHas = Object.values(S.training).some(s => !s.series && s.date >= addDays(ws, -7) && s.date < ws);
+  const weekOneOffs = weekSess.filter(s => !s.series).length;
   const label = ws === thisWeek ? 'This week' : ws < thisWeek ? 'Past week' : 'Coming week';
   let h = '<header class="page-head"><div><p class="eyebrow">' + label + '</p><h1>Athletics</h1></div>' +
     '<div class="head-tools"><button class="btn ghost small" data-action="open-activities">' + icon('palette') + 'Activities &amp; colors</button></div></header>';
@@ -1172,7 +1352,7 @@ function viewAthletics() {
       '<button class="day-add" data-action="sess-add" data-date="' + d + '" aria-label="Add workout on ' + dowDate(d) + '">' + icon('plus') + '<span>Add</span></button></div>';
   }).join('') + '</div>';
   h += tally(weekSess);
-  if (!weekSess.length && prevHas) h += '<div class="week-foot"><button class="btn ghost small" data-action="copy-week">' + icon('copy') + 'Copy last week’s plan</button></div>';
+  if (!weekOneOffs && prevHas) h += '<div class="week-foot"><button class="btn ghost small" data-action="copy-week">' + icon('copy') + 'Copy last week’s plan</button></div>';
   h += '<h2 class="sub-h">Athletics to-dos</h2>' + renderList('athletics', null, 'Add a to-do, like race sign-ups or gear');
   return h;
 }
@@ -1203,6 +1383,8 @@ function renderModal() {
   let inner = '';
   if (m.type === 'session') {
     const acts = S.config.activities;
+    const sessCur = m.id ? S.training[m.id] : null;
+    const sessSr = sessCur && sessCur.series ? S.series[sessCur.series] : null;
     inner = '<div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">' +
       '<h2 id="dlg-title">' + (m.id ? 'Edit workout' : 'Add a workout') + '</h2><p class="dlg-sub">' + esc(dowDate(m.date)) + '</p>' +
       '<form data-form="session"><div class="field"><span class="label">Activity</span><div class="act-pills">' +
@@ -1210,8 +1392,14 @@ function renderModal() {
         : '<span class="dlg-text">No activities yet. Add some under Activities &amp; colors.</span>') +
       '</div></div>' +
       '<label class="field"><span class="label">Details (optional)</span><input id="sess-note" class="input" value="' + esc(m.note || '') + '" placeholder="6 mi easy, 45 min trainer, intervals…" autocomplete="off"></label>' +
-      '<label class="field"><span class="label">Day</span><input id="sess-date" class="input" type="date" value="' + m.date + '"></label>' +
-      '<div class="dlg-actions">' + (m.id ? '<button type="button" class="btn ghost small danger" data-action="sess-delete">Delete</button>' : '') +
+      '<div class="field-row"><label class="field"><span class="label">Day</span><input id="sess-date" class="input" type="date" value="' + m.date + '"></label>' +
+      '<label class="field"><span class="label">Time (optional)</span><input id="sess-time" class="input" type="time" value="' + esc(m.time || '') + '"></label></div>' +
+      (sessSr ? '<div class="field"><span class="label">This workout repeats ' + esc(repeatLabel(sessSr.repeat).replace(/^Every/, 'every').replace(/^Weekdays/, 'on weekdays')) + '. Change:</span><div class="seg">' +
+        '<button type="button" class="' + (m.scope !== 'future' ? 'on' : '') + '" data-action="sess-scope" data-val="this">Just this one</button>' +
+        '<button type="button" class="' + (m.scope === 'future' ? 'on' : '') + '" data-action="sess-scope" data-val="future">This and future ones</button></div></div>' +
+        (m.scope === 'future' ? sessRepeatRows(m) : '')
+      : sessRepeatRows(m)) +
+      '<div class="dlg-actions">' + (m.id ? '<button type="button" class="btn ghost small danger" data-action="sess-delete">' + (sessSr && m.scope === 'future' ? 'Delete this and future' : 'Delete') + '</button>' : '') +
       '<span class="grow"></span><button type="button" class="btn ghost small" data-action="close-modal">Cancel</button>' +
       '<button type="submit" class="btn primary small"' + (m.act ? '' : ' disabled style="opacity:.5"') + '>' + (m.id ? 'Save' : 'Add') + '</button></div></form></div>';
   } else if (m.type === 'activities') {
@@ -1271,11 +1459,11 @@ function importData(text) {
   Object.values(d.training || {}).forEach(x => { if (x && x.id && x.date) training[x.id] = x; });
   const nt = Object.keys(tasks).length, nw = Object.keys(training).length;
   ui.modal = { type: 'confirm', title: 'Import ' + plural(nt, 'task') + '?', text: 'This brings in ' + plural(nt, 'task') + ', ' + plural(nw, 'workout') + ', your sub-tabs and activity colors, and replaces what’s in this planner now.', yes: 'Import',
-    onYes: () => { S.config = normalizeConfig(d.config); S.tasks = tasks; S.training = training; queueSave('config', 'tasks', 'training'); toast('Imported ' + plural(nt, 'task') + ' and ' + plural(nw, 'workout')); },
+    onYes: () => { S.config = normalizeConfig(d.config); S.tasks = tasks; S.training = training; S.series = d.series && typeof d.series === 'object' ? d.series : {}; queueSave('config', 'tasks', 'training'); toast('Imported ' + plural(nt, 'task') + ' and ' + plural(nw, 'workout')); },
     onNo: () => { ui.modal = { type: 'data' }; } };
 }
 function exportJSON() {
-  return JSON.stringify({ app: 'kates-planner', v: 1, exportedAt: new Date().toISOString(), config: S.config, tasks: S.tasks, training: S.training });
+  return JSON.stringify({ app: 'kates-planner', v: 1, exportedAt: new Date().toISOString(), config: S.config, tasks: S.tasks, training: S.training, series: S.series });
 }
 function copyData() {
   const ta = $('#data-text');
@@ -1297,6 +1485,7 @@ document.addEventListener('click', e => {
   let changed = false;
   if (ui.dueMenu && !e.target.closest('.due-menu') && a !== 'due') { ui.dueMenu = null; changed = true; }
   if (ui.rowMenu && !e.target.closest('.row-menu') && a !== 'more') { ui.rowMenu = null; changed = true; }
+  if (ui.moveMenu && !e.target.closest('.move-menu') && a !== 'move') { ui.moveMenu = null; changed = true; }
   if (!el) { if (changed) render(); return; }
   if (a === 'backdrop' && e.target !== el) { if (changed) render(); return; }
   if (!canEdit() && !READ_ONLY_OK.has(a)) return;
@@ -1317,7 +1506,25 @@ document.addEventListener('click', e => {
     case 'edit': ui.editing = id; ui.focus = '#edit-' + id; break;
     case 'collapse': if (ui.prefs.collapsed[id]) delete ui.prefs.collapsed[id]; else ui.prefs.collapsed[id] = 1; savePrefs(); break;
     case 'add-sub': ui.addSub = id; delete ui.prefs.collapsed[id]; savePrefs(); ui.rowMenu = null; ui.focus = '#sub-input'; break;
-    case 'more': ui.rowMenu = ui.rowMenu === id ? null : id; ui.dueMenu = null; break;
+    case 'more': ui.rowMenu = ui.rowMenu === id ? null : id; ui.dueMenu = null; ui.moveMenu = null; break;
+    case 'move': ui.moveMenu = ui.moveMenu === id ? null : id; ui.dueMenu = null; ui.rowMenu = null; break;
+    case 'new-sec': ui.addingSec = el.dataset.key; ui.focus = '#new-sec-input'; break;
+    case 'rename-sec': ui.renamingSec = el.dataset.sec; ui.focus = '#rename-sec-input'; ui.selectAll = true; break;
+    case 'collapse-sec': { ui.prefs.collapsedSec = ui.prefs.collapsedSec || {}; const k = el.dataset.sec; if (ui.prefs.collapsedSec[k]) delete ui.prefs.collapsedSec[k]; else ui.prefs.collapsedSec[k] = 1; savePrefs(); break; }
+    case 'delete-sec': {
+      const key = el.dataset.key, lists = (S.config.lists || {})[key] || [];
+      const l = lists.find(x => x.id === el.dataset.sec); if (!l) break;
+      const inIt = Object.values(S.tasks).filter(t => t.list === l.id);
+      ui.modal = { type: 'confirm', title: 'Delete section “' + l.name + '”?', text: inIt.length ? 'Its ' + plural(inIt.length, 'task') + ' won’t be deleted. They’ll stay in this tab, outside any section.' : 'This section has no tasks.', yes: 'Delete section',
+        onYes: () => {
+          const idx = lists.indexOf(l);
+          lists.splice(idx, 1);
+          inIt.forEach(t => { t.list = null; });
+          queueSave('config', 'tasks');
+          toast('Deleted section “' + l.name + '”', () => { lists.splice(idx, 0, l); S.config.lists[key] = lists; inIt.forEach(t => { if (S.tasks[t.id]) S.tasks[t.id].list = l.id; }); queueSave('config', 'tasks'); });
+        } };
+      break;
+    }
     case 'delete': deleteTask(id); ui.rowMenu = null; break;
     case 'clear-done': clearDone(el.dataset.section, el.dataset.subtab || null); break;
     case 'toast-undo': { const u = ui.toast && ui.toast.undo; ui.toast = null; clearTimeout(toastTimer); if (u) u(); break; }
@@ -1332,26 +1539,47 @@ document.addEventListener('click', e => {
           const list = S.config.subtabs[sec]; const idx = list.indexOf(tab);
           list.splice(idx, 1);
           const removed = tasks.map(t => clone(t)); removed.forEach(t => delete S.tasks[t.id]);
+          const lk = listKey(sec, tab.id), savedLists = (S.config.lists || {})[lk];
+          if (savedLists) delete S.config.lists[lk];
           queueSave('config', 'tasks');
-          toast('Deleted “' + tab.name + '”', () => { S.config.subtabs[sec].splice(idx, 0, tab); removed.forEach(t => { S.tasks[t.id] = t; }); ui.prefs.activeTab[sec] = tab.id; queueSave('config', 'tasks'); });
+          toast('Deleted “' + tab.name + '”', () => { S.config.subtabs[sec].splice(idx, 0, tab); if (savedLists) S.config.lists[lk] = savedLists; removed.forEach(t => { S.tasks[t.id] = t; }); ui.prefs.activeTab[sec] = tab.id; queueSave('config', 'tasks'); });
         } };
       break;
     }
     case 'week-prev': ui.weekStart = addDays(ui.weekStart, -7); break;
-    case 'week-next': ui.weekStart = addDays(ui.weekStart, 7); break;
+    case 'week-next': ui.weekStart = addDays(ui.weekStart, 7); if (canEdit()) ensureSeries(addDays(ui.weekStart, 6)); break;
     case 'week-today': ui.weekStart = mondayOf(today()); break;
     case 'copy-week': copyWeek(); break;
     case 'sess-add': {
       const last = ui.prefs.lastAct && actById(ui.prefs.lastAct) ? ui.prefs.lastAct : (S.config.activities[0] ? S.config.activities[0].id : null);
-      ui.modal = { type: 'session', id: null, date: el.dataset.date, act: last, note: '' };
+      ui.modal = { type: 'session', id: null, date: el.dataset.date, act: last, note: '', time: '', repeat: null, scope: 'this' };
       break;
     }
-    case 'sess-edit': { const s = S.training[id]; if (s) ui.modal = { type: 'session', id, date: s.date, act: s.act, note: s.note || '' }; break; }
+    case 'sess-edit': { const s = S.training[id]; if (s) { const sr = s.series && S.series[s.series]; ui.modal = { type: 'session', id, date: s.date, act: s.act, note: s.note || '', time: s.time || '', repeat: sr ? clone(sr.repeat) : null, scope: 'this' }; } break; }
     case 'sess-done': { const s = S.training[id]; if (s) { s.done = !s.done; queueSave('training'); } break; }
-    case 'pick-act': if (ui.modal) { const n = $('#sess-note'), d = $('#sess-date'); if (n) ui.modal.note = n.value; if (d && d.value) ui.modal.date = d.value; ui.modal.act = el.dataset.act; } break;
+    case 'pick-act': if (ui.modal) { captureSess(); ui.modal.act = el.dataset.act; } break;
+    case 'sess-rep': if (ui.modal) {
+      captureSess();
+      const v = el.dataset.val, cur = ui.modal.repeat;
+      ui.modal.repeat = !v ? null : v === 'weekly' ? { type: 'weekly', days: cur && cur.type === 'weekly' ? cur.days : [parse(ui.modal.date).getDay()] } : { type: v };
+    } break;
+    case 'sess-rep-day': if (ui.modal && ui.modal.repeat && ui.modal.repeat.type === 'weekly') {
+      captureSess();
+      const day = Number(el.dataset.day), days = new Set(ui.modal.repeat.days || []);
+      if (days.has(day)) { if (days.size > 1) days.delete(day); } else days.add(day);
+      ui.modal.repeat = { type: 'weekly', days: Array.from(days) };
+    } break;
+    case 'sess-scope': if (ui.modal) { captureSess(); ui.modal.scope = el.dataset.val === 'future' ? 'future' : 'this'; } break;
     case 'sess-delete': {
-      const s = ui.modal && S.training[ui.modal.id];
-      if (s) { const copy = clone(s); delete S.training[s.id]; queueSave('training'); toast('Workout deleted', () => { S.training[copy.id] = copy; queueSave('training'); }); }
+      const m = ui.modal, s = m && S.training[m.id];
+      if (s) {
+        const before = { training: clone(S.training), series: clone(S.series) };
+        const undo = () => { S.training = before.training; S.series = before.series; queueSave('training'); };
+        const sr = s.series && S.series[s.series];
+        if (sr && m.scope === 'future') { endSeries(sr, s.date); toast('Deleted this and future workouts', undo); }
+        else { delete S.training[s.id]; toast('Workout deleted', undo); }
+        queueSave('training');
+      }
       ui.modal = null; break;
     }
     case 'open-activities': ui.modal = { type: 'activities' }; ui.colorPick = null; break;
@@ -1403,12 +1631,13 @@ document.addEventListener('submit', e => {
   const kind = f.dataset.form;
   const input = f.querySelector('input');
   if (kind === 'add') {
-    if (addTask(input.value, { section: f.dataset.section, subtab: f.dataset.subtab || null })) ui.focus = '#add-input';
+    const lid = f.dataset.list || null;
+    if (addTask(input.value, { section: f.dataset.section, subtab: f.dataset.subtab || null, list: lid })) ui.focus = '#add-input' + (lid ? '-' + lid : '');
   } else if (kind === 'quick') {
     const target = $('#quick-target').value || 'inbox|';
     ui.prefs.quickTarget = target; savePrefs();
     const parts = target.split('|');
-    const t = addTask(input.value, { section: parts[0], subtab: parts[1] || null, eod: today() });
+    const t = addTask(input.value, { section: parts[0], subtab: parts[1] || null, list: parts[2] || null, eod: today() });
     if (t) ui.focus = '#quick-input';
   } else if (kind === 'ov-add') {
     const sec = f.dataset.section;
@@ -1423,6 +1652,10 @@ document.addEventListener('submit', e => {
     commitNewTab(input.value);
   } else if (kind === 'rename-tab') {
     commitRename(f.dataset.tab, input.value);
+  } else if (kind === 'new-sec') {
+    commitNewSec(f.dataset.key, input.value);
+  } else if (kind === 'rename-sec') {
+    commitRenameSec(f.dataset.key, f.dataset.sec, input.value);
   } else if (kind === 'session') {
     saveSession();
   }
@@ -1466,8 +1699,8 @@ document.addEventListener('keydown', e => {
   }
   if (e.key !== 'Escape') return;
   if (ui.modal) { const m = ui.modal; ui.modal = null; ui.colorPick = null; if (m.onNo) m.onNo(); render(); return; }
-  if (ui.dueMenu || ui.rowMenu || ui.addSub || ui.addingTab || ui.renamingTab) {
-    ui.dueMenu = ui.rowMenu = ui.addSub = ui.renamingTab = null; ui.addingTab = false; render();
+  if (ui.dueMenu || ui.rowMenu || ui.moveMenu || ui.addSub || ui.addingTab || ui.renamingTab || ui.addingSec || ui.renamingSec) {
+    ui.dueMenu = ui.rowMenu = ui.moveMenu = ui.addSub = ui.renamingTab = ui.addingSec = ui.renamingSec = null; ui.addingTab = false; render();
   }
 });
 
@@ -1479,11 +1712,14 @@ document.addEventListener('focusout', e => {
   else if (t.id === 'sub-input') { if (!t.value.trim()) { ui.addSub = null; softRender(); } }
   else if (t.id === 'new-tab-input') { if (ui.addingTab) { commitNewTab(t.value); softRender(); } }
   else if (t.id === 'rename-tab-input') { const f = t.closest('form'); if (ui.renamingTab) { commitRename(f && f.dataset.tab, t.value); softRender(); } }
+  else if (t.id === 'new-sec-input') { const f = t.closest('form'); if (ui.addingSec) { commitNewSec(f && f.dataset.key, t.value); softRender(); } }
+  else if (t.id === 'rename-sec-input') { const f = t.closest('form'); if (ui.renamingSec) { commitRenameSec(f && f.dataset.key, f && f.dataset.sec, t.value); softRender(); } }
 });
 
 document.addEventListener('change', e => {
   const t = e.target;
   if (!canEdit()) return;
+  if (t.dataset.moveFor) { moveTask(t.dataset.moveFor, t.value); ui.moveMenu = null; render(); return; }
   if (t.dataset.dateFor) {
     const task = S.tasks[t.dataset.dateFor];
     if (task && t.value) { task.due = t.value; queueSave('tasks'); ui.dueMenu = null; render(); }
@@ -1501,13 +1737,14 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('input', e => {
   if (e.target.id === 'sess-note' && ui.modal) ui.modal.note = e.target.value;
+  if (e.target.id === 'sess-time' && ui.modal) ui.modal.time = e.target.value;
 });
 
 function route() {
   const h = location.hash.replace('#', '');
   const v = SEC[h] ? h : 'today';
   if (v !== ui.view) {
-    ui.editing = ui.addSub = ui.dueMenu = ui.rowMenu = ui.renamingTab = null; ui.addingTab = false;
+    ui.editing = ui.addSub = ui.dueMenu = ui.rowMenu = ui.moveMenu = ui.renamingTab = ui.addingSec = ui.renamingSec = null; ui.addingTab = false;
     if (SEC[v].tabs) ui.prefs.activeTab[v] = OVERVIEW;
   }
   ui.view = v;
@@ -1522,7 +1759,7 @@ function checkDay() {
   if (td === lastDay) return;
   if (ui.weekStart === mondayOf(lastDay)) ui.weekStart = mondayOf(td);
   lastDay = td;
-  if (canEdit()) rollRecurring();
+  if (canEdit()) { rollRecurring(); ensureSeries(); }
   render();
 }
 setInterval(checkDay, 60000);
