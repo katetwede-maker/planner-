@@ -302,6 +302,21 @@ button.chip:hover{border-color:var(--sage)}
 .set-sec{border-top:1px solid var(--line);padding:16px 0 4px}
 .set-sec h3{margin:0 0 6px;font-size:14px}
 .set-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.rs-copy{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);margin:0 0 8px;color:var(--ink)}
+.rs-copy:hover:not([disabled]){border-color:var(--sage);background:var(--surface-2)}
+.rs-copy[disabled]{opacity:.55;cursor:default}
+.rs-copy b{display:block;font-weight:600;font-size:14px}
+.rs-meta{display:block;font-size:12.5px;color:var(--muted)}
+.rs-count{font-size:12.5px;color:var(--muted);text-align:right;max-width:46%}
+.rs-count.hot{color:var(--ink);font-weight:600}
+.rs-tools{display:flex;align-items:center;flex-wrap:wrap;gap:2px 4px;margin:4px 0 0}
+.rs-tools .link-btn{white-space:nowrap}
+.rs-list{max-height:46vh;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:2px 12px 10px;margin:8px 0 12px}
+.rs-group h4{margin:12px 0 2px;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
+.rs-item{display:flex;align-items:flex-start;gap:9px;padding:5px 0;font-size:14px;cursor:pointer}
+.rs-item input{margin-top:3px;width:16px;height:16px;accent-color:var(--accent);flex:none}
+.rs-item em{font-style:normal;font-size:12.5px;color:var(--muted)}
+.rs-item.done>span{color:var(--muted);text-decoration:line-through}
 
 /* toast */
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 12px 10px 16px;border-radius:12px;display:flex;gap:14px;align-items:center;font-size:14px;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.2);max-width:calc(100% - 32px)}
@@ -362,7 +377,7 @@ const FIREBASE_CONFIG = {
 };
 const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/10.12.2/';
 /* Bump together with version.json on every update so open copies reload themselves. */
-const APP_VERSION = '2026-11-10.1';
+const APP_VERSION = '2026-11-25.1';
 (function () {
 'use strict';
 
@@ -472,18 +487,45 @@ function normalizeConfig(c) {
 
 const LS_DATA = 'kates-planner:data';
 const LS_PREFS = 'kates-planner:prefs';
+const LS_PENDING = 'kates-planner:pending';   // changes not yet saved to the cloud
+const LS_BACKUPS = 'kates-planner:backups';   // earlier copies kept on this device
+const LS_CLOUD_BK = 'kates-planner:cloud-backup-day';
 function lsGet(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch (e) { return null; } }
-function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } }
+
+/* ---- copies kept on this device ----
+   Saved when the planner opens (before syncing) and whenever an update from the cloud
+   would remove tasks, so a bad sync can always be undone from Settings › Restore. */
+function deviceBackups() { const b = lsGet(LS_BACKUPS); return Array.isArray(b) ? b.filter(x => x && x.data && x.data.tasks) : []; }
+function saveDeviceBackup(src) {
+  if (!src || !src.tasks || !Object.keys(src.tasks).length) return;
+  const data = JSON.parse(JSON.stringify({ config: src.config || null, tasks: src.tasks, training: src.training || {}, series: src.series || {} }));
+  let list = deviceBackups();
+  const sig = x => JSON.stringify([Object.keys(x.tasks).sort(), Object.keys(x.training || {}).length]);
+  if (list.length && sig(list[0].data) === sig(data)) return;
+  list.unshift({ at: Date.now(), data });
+  // keep the 6 newest, plus the first copy of each earlier day for two weeks
+  const keep = [], days = new Set(), now = Date.now();
+  list.forEach((b, i) => {
+    if (i < 6) { keep.push(b); return; }
+    if (now - b.at > 15 * 86400000) return;
+    const d = new Date(b.at).toDateString();
+    if (days.has(d)) { keep[keep.length - 1] = keep[keep.length - 1].at < b.at ? keep[keep.length - 1] : b; return; }
+    days.add(d); keep.push(b);
+  });
+  list = keep;
+  while (list.length && !lsSet(LS_BACKUPS, list)) list = list.slice(0, list.length - 1);
+}
 
 let S = { config: defaultConfig(), tasks: {}, training: {}, series: {} };
-const localHad = { config: false, tasks: false, training: false };
 (function loadLocal() {
   const c = lsGet(LS_DATA);
   if (!c) return;
-  if (c.config) { S.config = normalizeConfig(c.config); localHad.config = true; }
-  if (c.tasks && typeof c.tasks === 'object') { S.tasks = c.tasks; localHad.tasks = Object.keys(c.tasks).length > 0; }
-  if (c.training && typeof c.training === 'object') { S.training = c.training; localHad.training = Object.keys(c.training).length > 0; }
-  if (c.series && typeof c.series === 'object') { S.series = c.series; if (Object.keys(c.series).length) localHad.training = true; }
+  if (c.config) S.config = normalizeConfig(c.config);
+  if (c.tasks && typeof c.tasks === 'object') S.tasks = c.tasks;
+  if (c.training && typeof c.training === 'object') S.training = c.training;
+  if (c.series && typeof c.series === 'object') S.series = c.series;
+  saveDeviceBackup(S);
 })();
 const saveLocal = () => lsSet(LS_DATA, S);
 
@@ -495,13 +537,16 @@ const ui = {
 };
 const savePrefs = () => lsSet(LS_PREFS, ui.prefs);
 
-/* ================= saving & sync (Firebase) ================= */
+/* ================= saving & sync (Firebase) =================
+   Each save is a transaction: it reads the cloud copy and applies only what changed on this
+   device (task by task), so a device with an old copy can never wipe out newer tasks.
+   Editing waits until the cloud copy has loaded. */
 const DOCS = ['config', 'tasks', 'training'];
-const sync = { mode: 'connecting', ready: false, refs: {}, dirty: {}, pending: {}, timers: {}, lastRev: {}, loaded: {}, warn: '', error: '', unsubs: [], user: null };
+const sync = { mode: 'connecting', ready: false, readOnly: false, refs: {}, dirty: {}, inflight: {}, timers: {}, fails: {}, base: {}, baseN: {}, server: {}, loaded: {}, pendingDone: {}, rollPending: false, warn: '', error: '', unsubs: [], user: null };
 const clientId = uid();
 let seq = 0;
 let FB = null, fb = null, loadTimer = null;
-const canEdit = () => sync.ready && sync.mode !== 'offline';
+const canEdit = () => sync.ready && sync.mode !== 'offline' && !sync.readOnly;
 const fbConfigured = !!(FIREBASE_CONFIG.apiKey && !/^PASTE/.test(FIREBASE_CONFIG.apiKey) && FIREBASE_CONFIG.projectId);
 
 function docBody(w) {
@@ -517,63 +562,195 @@ function applyDoc(w, d) {
     S.series = d.series && typeof d.series === 'object' ? d.series : {};
   }
 }
+/* A document as a flat map of independent pieces (one per task, workout, sub-tab list…). */
+function flat(w, b) {
+  const o = {};
+  if (w === 'config') {
+    const c = normalizeConfig(b);
+    ['react', 'work', 'wellness'].forEach(k => { o['subtabs:' + k] = c.subtabs[k]; });
+    Object.keys(c.lists).forEach(k => { o['lists:' + k] = c.lists[k]; });
+    o.groups = c.groups; o.activities = c.activities; o.colorBy = c.colorBy;
+    return o;
+  }
+  const items = b && b.items && typeof b.items === 'object' ? b.items : {};
+  Object.keys(items).forEach(k => { o['i:' + k] = items[k]; });
+  if (w === 'training') { const s = b && b.series && typeof b.series === 'object' ? b.series : {}; Object.keys(s).forEach(k => { o['s:' + k] = s[k]; }); }
+  return o;
+}
+function unflat(w, o) {
+  if (w === 'config') {
+    const c = { subtabs: { react: o['subtabs:react'] || [], work: o['subtabs:work'] || [], wellness: o['subtabs:wellness'] || [] }, lists: {}, groups: o.groups, activities: o.activities, colorBy: o.colorBy };
+    Object.keys(o).forEach(k => { if (k.indexOf('lists:') === 0) c.lists[k.slice(6)] = o[k]; });
+    return normalizeConfig(c);
+  }
+  const items = {}, series = {};
+  Object.keys(o).forEach(k => { if (k.indexOf('i:') === 0) items[k.slice(2)] = o[k]; else if (k.indexOf('s:') === 0) series[k.slice(2)] = o[k]; });
+  return w === 'training' ? { items, series } : { items };
+}
+function stable(v) {
+  if (Array.isArray(v)) return '[' + v.map(stable).join(',') + ']';
+  if (v && typeof v === 'object') return '{' + Object.keys(v).sort().filter(k => v[k] !== undefined).map(k => JSON.stringify(k) + ':' + stable(v[k])).join(',') + '}';
+  return JSON.stringify(v === undefined ? null : v);
+}
+function diffFlat(a, b) {
+  const set = {}, del = [];
+  Object.keys(b).forEach(k => { if (!(k in a) || stable(a[k]) !== stable(b[k])) set[k] = b[k]; });
+  Object.keys(a).forEach(k => { if (!(k in b)) del.push(k); });
+  return { set, del };
+}
+const diffEmpty = d => !d.del.length && !Object.keys(d.set).length;
+function applyFlat(o, d) {
+  const r = Object.assign({}, o);
+  d.del.forEach(k => { delete r[k]; });
+  Object.keys(d.set).forEach(k => { r[k] = d.set[k]; });
+  return r;
+}
+function setLocal(w, f) { applyDoc(w, clone(unflat(w, f))); saveLocal(); }
+const myChanges = w => sync.base[w] ? diffFlat(sync.base[w], flat(w, docBody(w))) : { set: {}, del: [] };
+function savePending(w) {
+  const p = lsGet(LS_PENDING) || {};
+  const d = myChanges(w);
+  if (diffEmpty(d)) delete p[w]; else p[w] = d;
+  lsSet(LS_PENDING, p);
+}
+function snapFlat(w, snap) {
+  if (!snap.exists()) return {};
+  const d = snap.data();
+  if (!d || typeof d.data !== 'string') return null;
+  try { return flat(w, JSON.parse(d.data)); } catch (e) { return null; }
+}
+/* Bring a cloud copy in, keeping any changes made on this device that aren't saved yet. */
+function integrate(w, snap) {
+  const incoming = snapFlat(w, snap);
+  if (incoming === null) return false;
+  const d = snap.exists() ? snap.data() : null;
+  const n = d && typeof d.n === 'number' ? d.n : 0;
+  if (sync.base[w] && n > 0 && sync.baseN[w] > 0 && n < sync.baseN[w]) return false; // older than what we have
+  const local = flat(w, docBody(w));
+  const mine = myChanges(w);
+  const next = applyFlat(incoming, mine);
+  const change = diffFlat(local, next);
+  if (w === 'tasks' && change.del.length >= 2) saveDeviceBackup(S); // tasks about to disappear: keep a copy first
+  sync.base[w] = clone(incoming); sync.baseN[w] = n;
+  if (!diffEmpty(change)) { setLocal(w, next); return true; }
+  return false;
+}
 function queueSave() {
   const ws = Array.from(arguments);
   saveLocal();
   if (sync.mode !== 'cloud') return;
   ws.forEach(w => {
     sync.dirty[w] = true;
+    savePending(w);
     clearTimeout(sync.timers[w]);
     sync.timers[w] = setTimeout(() => flush(w), 500);
   });
   renderStatus();
 }
-function flush(w) {
-  if (!sync.dirty[w] || !sync.refs[w]) return;
+async function flush(w) {
+  clearTimeout(sync.timers[w]);
+  if (!sync.dirty[w] || !sync.refs[w] || sync.inflight[w]) return;
+  if (!sync.server[w] || !sync.base[w]) return; // waits for the cloud copy; subscribe() calls flush again
+  const ref = sync.refs[w];
+  const captured = flat(w, docBody(w));
+  const mine = diffFlat(sync.base[w], captured);
   sync.dirty[w] = false;
-  const rev = clientId + ':' + (++seq);
-  sync.lastRev[w] = rev;
-  sync.pending[w] = (sync.pending[w] || 0) + 1;
+  if (diffEmpty(mine)) { savePending(w); renderStatus(); return; }
+  sync.inflight[w] = true;
   renderStatus();
-  FB.setDoc(sync.refs[w], { data: JSON.stringify(docBody(w)), rev, updatedAt: Date.now() })
-    .then(() => { sync.error = ''; })
-    .catch(e => {
-      sync.error = e && e.code === 'permission-denied'
-        ? 'Couldn’t save: permission denied. Check the Firestore rules.'
-        : 'Couldn’t save your last change. Check your connection.';
-    })
-    .finally(() => { sync.pending[w]--; renderStatus(); });
+  const rev = clientId + ':' + (++seq);
+  let changed = false;
+  try {
+    const res = await FB.runTransaction(fb.db, async tx => {
+      const snap = await tx.get(ref);
+      const cur = snap.exists() ? snap.data() : null;
+      const server = cur && typeof cur.data === 'string' ? flat(w, JSON.parse(cur.data)) : {};
+      const n = (cur && typeof cur.n === 'number' ? cur.n : 0) + 1;
+      const merged = applyFlat(server, mine);
+      tx.set(ref, { data: JSON.stringify(unflat(w, merged)), rev, n, updatedAt: Date.now() });
+      return { merged, n };
+    });
+    if (ref !== sync.refs[w]) return;
+    const extra = diffFlat(captured, flat(w, docBody(w))); // edits made while this was saving
+    if (!(sync.baseN[w] > res.n)) {
+      sync.base[w] = clone(res.merged); sync.baseN[w] = res.n;
+      const next = applyFlat(res.merged, extra);
+      if (!diffEmpty(diffFlat(flat(w, docBody(w)), next))) { setLocal(w, next); changed = true; }
+    }
+    if (!diffEmpty(extra)) sync.dirty[w] = true;
+    sync.fails[w] = 0; sync.error = '';
+  } catch (e) {
+    if (ref !== sync.refs[w]) return;
+    sync.dirty[w] = true;
+    sync.fails[w] = (sync.fails[w] || 0) + 1;
+    sync.error = e && e.code === 'permission-denied'
+      ? 'Couldn’t save: permission denied. Check the Firestore rules.'
+      : 'Not saved yet. It will keep trying, and your change is kept on this device.';
+  } finally {
+    if (ref === sync.refs[w]) {
+      sync.inflight[w] = false;
+      savePending(w);
+      if (sync.dirty[w]) sync.timers[w] = setTimeout(() => flush(w), sync.fails[w] ? Math.min(30000, 2000 * sync.fails[w]) : 300);
+      if (changed && sync.ready) render(); else renderStatus();
+    }
+  }
+}
+function handleSnap(w, snap) {
+  sync.loaded[w] = true;
+  const fromServer = !snap.metadata.fromCache;
+  const changed = integrate(w, snap);
+  if (fromServer && !sync.server[w]) {
+    sync.server[w] = true;
+    // changes that were made on this device but never reached the cloud (closed too soon, offline)
+    const p = lsGet(LS_PENDING) || {};
+    if (p[w] && p[w].set && Array.isArray(p[w].del) && !diffEmpty(p[w])) { setLocal(w, applyFlat(flat(w, docBody(w)), p[w])); sync.dirty[w] = true; }
+    if (sync.dirty[w]) flush(w);
+  }
+  if (fromServer && sync.warn) sync.warn = '';
+  if (DOCS.every(k => sync.server[k])) { if (!sync.ready || sync.readOnly) cloudReady(); else if (changed) render(); else renderStatus(); }
+  else if (sync.ready && changed) render();
+  else renderStatus();
 }
 function subscribe(w) {
-  const un = FB.onSnapshot(sync.refs[w], snap => {
-    if (!sync.loaded[w]) {
-      sync.loaded[w] = true;
-      if (!snap.exists() && localHad[w]) queueSave(w);
-    }
-    if (!snap.metadata.fromCache && sync.warn) sync.warn = '';
-    if (snap.exists() && !sync.dirty[w] && !(sync.pending[w] > 0)) {
-      const d = snap.data();
-      if (d && typeof d.data === 'string' && d.rev !== sync.lastRev[w]) {
-        try { applyDoc(w, JSON.parse(d.data)); sync.lastRev[w] = d.rev; saveLocal(); if (sync.ready) render(); } catch (e) {}
-      }
-    }
-    if (!sync.ready && DOCS.every(k => sync.loaded[k])) markReady();
-    else renderStatus();
-  }, err => {
+  const ref = sync.refs[w];
+  // includeMetadataChanges: also tells us when the copy shown is confirmed by the cloud
+  const un = FB.onSnapshot(ref, { includeMetadataChanges: true }, snap => { if (sync.refs[w] === ref) handleSnap(w, snap); }, err => {
     sync.error = err && err.code === 'permission-denied'
       ? 'Can’t read your tasks: permission denied. Check the Firestore rules.'
       : 'Syncing stopped. Reload the page to reconnect.';
-    if (!sync.ready) markReady(); else renderStatus();
+    if (!sync.ready) { sync.readOnly = true; markReady(); } else renderStatus();
   });
   sync.unsubs.push(un);
+  // and ask the cloud directly, so a device never starts from an old copy
+  FB.getDocFromServer(ref).then(snap => { if (sync.refs[w] === ref) handleSnap(w, snap); }).catch(() => {});
+}
+function cloudReady() {
+  clearTimeout(loadTimer);
+  sync.readOnly = false; sync.warn = '';
+  if (!sync.ready) markReady();
+  else { pruneOld(); rollRecurring(); ensureSeries(); render(); }
+  cloudBackup();
 }
 function markReady() {
   clearTimeout(loadTimer);
   sync.ready = true;
-  pruneOld();
-  if (canEdit()) { rollRecurring(); ensureSeries(); }
+  if (canEdit()) { pruneOld(); rollRecurring(); ensureSeries(); }
   render();
   setTimeout(checkForUpdate, 1500);
+}
+/* Once a day, keep a copy in the cloud too (Settings › Restore lists the last two weeks). */
+const backupRef = day => FB.doc(fb.db, 'users', sync.user.uid, 'planner', 'backup-' + day);
+async function cloudBackup() {
+  if (sync.mode !== 'cloud' || !sync.user) return;
+  const td = today(), key = sync.user.uid + ':' + td;
+  if (lsGet(LS_CLOUD_BK) === key) return;
+  try {
+    const ref = backupRef(td);
+    const ex = await FB.getDoc(ref);
+    if (!ex.exists()) await FB.setDoc(ref, { data: exportJSON(), at: Date.now() });
+    lsSet(LS_CLOUD_BK, key);
+    FB.deleteDoc(backupRef(addDays(td, -15))).catch(() => {});
+  } catch (e) {}
 }
 async function initSync() {
   if (!fbConfigured) { sync.mode = 'local'; markReady(); return; }
@@ -595,18 +772,32 @@ async function initSync() {
 }
 function startCloud(user) {
   if (sync.user && sync.user.uid === user.uid) return;
-  sync.user = user; sync.mode = 'cloud'; sync.ready = false; sync.loaded = {}; sync.error = ''; sync.warn = '';
+  sync.user = user; sync.mode = 'cloud'; sync.ready = false; sync.readOnly = false; sync.loaded = {}; sync.server = {}; sync.base = {}; sync.baseN = {}; sync.error = ''; sync.warn = '';
   ui.signIn = null;
   render();
   clearTimeout(loadTimer);
   loadTimer = setTimeout(() => {
-    if (!sync.ready) { sync.warn = 'Can’t reach your saved tasks yet. Changes may not sync.'; markReady(); }
+    if (!sync.ready) { sync.readOnly = true; sync.warn = 'Can’t reach your saved tasks right now. Showing the copy on this device; you can make changes once it reconnects.'; markReady(); }
   }, 10000);
   DOCS.forEach(w => { sync.refs[w] = FB.doc(fb.db, 'users', user.uid, 'planner', w); subscribe(w); });
 }
 function stopCloud() {
   sync.unsubs.forEach(u => { try { u(); } catch (e) {} });
-  sync.unsubs = []; sync.refs = {}; sync.user = null; sync.loaded = {};
+  DOCS.forEach(w => clearTimeout(sync.timers[w]));
+  sync.unsubs = []; sync.refs = {}; sync.user = null; sync.loaded = {}; sync.server = {}; sync.base = {}; sync.baseN = {}; sync.dirty = {}; sync.inflight = {};
+}
+/* After the day changes, get the newest cloud copy before resetting repeating tasks. */
+async function dayRoll() {
+  if (sync.mode === 'cloud') {
+    try {
+      const snaps = await Promise.all(DOCS.map(w => FB.getDocFromServer(sync.refs[w])));
+      let changed = false;
+      snaps.forEach((s, i) => { if (integrate(DOCS[i], s)) changed = true; });
+      if (changed) render();
+    } catch (e) { sync.rollPending = true; return; }
+  }
+  sync.rollPending = false;
+  if (canEdit()) { rollRecurring(); ensureSeries(); render(); }
 }
 function showSignIn() {
   stopCloud();
@@ -636,7 +827,7 @@ async function doReset(email) {
 }
 async function doSignOut() {
   stopCloud();
-  try { localStorage.removeItem(LS_DATA); } catch (e) {}
+  try { localStorage.removeItem(LS_DATA); localStorage.removeItem(LS_PENDING); } catch (e) {}
   S = { config: defaultConfig(), tasks: {}, training: {}, series: {} };
   ui.modal = null;
   if (fb) await FB.signOut(fb.auth);
@@ -667,7 +858,8 @@ function statusInfo() {
   if (!sync.ready) return { cls: 'loading', text: 'Loading your tasks…' };
   if (sync.warn) return { cls: 'err', text: sync.warn };
   if (sync.mode === 'local') return { cls: 'local', text: 'Saved in this browser only' };
-  if (DOCS.some(w => sync.dirty[w] || sync.pending[w] > 0)) return { cls: 'saving', text: 'Saving…' };
+  if (sync.readOnly) return { cls: 'err', text: 'Can’t reach your saved tasks right now. Changes are paused until it reconnects.' };
+  if (DOCS.some(w => sync.dirty[w] || sync.inflight[w])) return { cls: 'saving', text: 'Saving…' };
   return { cls: '', text: 'All changes saved' };
 }
 function renderStatus() {
@@ -1433,6 +1625,7 @@ function renderModal() {
     inner = '<div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="dlg-title"><h2 id="dlg-title">Settings &amp; data</h2>' +
       '<p class="dlg-sub">' + plural(n, 'task') + ' and ' + plural(w, 'workout') + ' saved.</p>' +
       (who ? '<div class="set-sec"><h3>Account</h3><div class="set-row"><span class="dlg-text" style="margin:0">Signed in as ' + esc(who) + '</span><span class="grow"></span><button type="button" class="btn ghost small" data-action="sign-out">Sign out</button></div></div>' : '') +
+      '<div class="set-sec"><h3>Restore</h3><div class="set-row"><span class="dlg-text" style="margin:0;flex:1 1 240px">Missing tasks? Bring them back from an earlier copy. This only adds tasks back; it never removes anything.</span><button type="button" class="btn ghost small" data-action="open-restore">Restore tasks…</button></div></div>' +
       '<div class="set-sec"><h3>Import data</h3><p class="dlg-text" style="margin:0 0 8px">Paste data copied from your old planner. It replaces what’s here now.</p>' +
       '<textarea id="import-text" class="data-text" style="height:90px" placeholder="Paste your data here" aria-label="Data to import"></textarea>' +
       '<div class="set-row" style="margin-top:8px"><span class="grow"></span><button type="button" class="btn primary small" data-action="import-data">Import data</button></div></div>' +
@@ -1440,6 +1633,8 @@ function renderModal() {
       '<textarea id="data-text" class="data-text" style="height:70px" readonly aria-label="Your planner data">' + esc(exportJSON()) + '</textarea>' +
       '<div class="set-row" style="margin-top:8px"><span class="grow"></span><button type="button" class="btn ghost small" data-action="copy-data">Copy my data</button></div></div>' +
       '<div class="dlg-actions" style="margin-top:14px"><span class="grow"></span><button type="button" class="btn primary small" data-action="close-modal">Done</button></div></div>';
+  } else if (m.type === 'restore') {
+    inner = restoreDialog(m);
   } else if (m.type === 'confirm') {
     inner = '<div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dlg-title"><h2 id="dlg-title">' + esc(m.title) + '</h2><p class="dlg-text">' + esc(m.text) + '</p>' +
       '<div class="dlg-actions"><span class="grow"></span><button type="button" class="btn ghost small" data-action="confirm-no">Cancel</button><button type="button" class="btn primary small" data-action="confirm-yes">' + esc(m.yes || 'Delete') + '</button></div></div>';
@@ -1448,7 +1643,7 @@ function renderModal() {
 }
 
 /* ================= events ================= */
-const READ_ONLY_OK = new Set(['collapse', 'tab', 'week-prev', 'week-next', 'week-today', 'close-modal', 'backdrop', 'confirm-no', 'more', 'due', 'open-data', 'copy-data', 'forgot', 'sign-out']);
+const READ_ONLY_OK = new Set(['collapse', 'tab', 'week-prev', 'week-next', 'week-today', 'close-modal', 'backdrop', 'confirm-no', 'more', 'due', 'open-data', 'copy-data', 'forgot', 'sign-out', 'open-restore', 'restore-pick', 'restore-back', 'restore-toggle', 'restore-all', 'restore-paste', 'restore-compare', 'restore-show-done']);
 function importData(text) {
   let d = null;
   try { d = JSON.parse(String(text || '').trim()); } catch (e) {}
@@ -1471,6 +1666,152 @@ function copyData() {
   try {
     navigator.clipboard.writeText(exportJSON()).then(() => { toast('Copied. Now paste it into your new planner.'); renderToast(); }, fallback);
   } catch (e) { fallback(); }
+}
+/* ---- Restore: bring back tasks and workouts from an earlier copy (only ever adds) ---- */
+function copyFrom(raw) {
+  if (!raw || typeof raw !== 'object' || !raw.tasks || typeof raw.tasks !== 'object') return null;
+  return { config: raw.config || null, tasks: raw.tasks, training: raw.training && typeof raw.training === 'object' ? raw.training : {}, series: raw.series && typeof raw.series === 'object' ? raw.series : {} };
+}
+function missingIn(d) {
+  const pruneCut = addDays(today(), -14), from = addDays(today(), -30);
+  const tasks = Object.values(d.tasks).filter(t => t && t.id && typeof t.title === 'string' && !S.tasks[t.id] &&
+    !(t.section === 'inbox' && t.done && t.doneAt && t.doneAt < pruneCut));
+  const workouts = Object.values(d.training).filter(x => x && x.id && x.date && x.date >= from && !S.training[x.id] && !(x.series && S.series[x.series]));
+  return { tasks, workouts, open: tasks.filter(t => !t.done).length };
+}
+function placeIn(t, d) {
+  if (t.section === 'inbox') return 'By EOD';
+  const cfg = normalizeConfig(d.config || {});
+  const sec = SEC[t.section];
+  let s = sec ? sec.name : 'Other';
+  if (t.subtab) {
+    const tab = findTab(t.section, t.subtab) || (cfg.subtabs[t.section] || []).find(x => x.id === t.subtab);
+    s += ' › ' + (tab ? tab.name : 'Sub-tab');
+  } else if (sec && sec.tabs) s += ' › General';
+  if (t.list) {
+    const key = listKey(t.section, t.subtab);
+    const l = listsOf(t.section, t.subtab).concat(cfg.lists[key] || []).find(x => x.id === t.list);
+    if (l) s += ' › ' + l.name;
+  }
+  return s;
+}
+function fmtWhen(ms) {
+  const d = new Date(ms);
+  return dowDate(fmt(d)) + ' · ' + fmtTime(pad(d.getHours()) + ':' + pad(d.getMinutes()));
+}
+function openRestore() {
+  const copies = deviceBackups().map((b, i) => ({ id: 'd' + i, label: 'Saved on this device', when: fmtWhen(b.at), data: copyFrom(b.data) })).filter(c => c.data);
+  ui.modal = { type: 'restore', step: 'list', copies, cloud: sync.mode === 'cloud' ? 'loading' : 'none' };
+  if (sync.mode === 'cloud') loadCloudCopies(ui.modal);
+}
+async function loadCloudCopies(m) {
+  const td = today(), days = [];
+  for (let i = 0; i <= 15; i++) days.push(addDays(td, -i));
+  const res = await Promise.allSettled(days.map(d => FB.getDoc(backupRef(d))));
+  const found = [];
+  res.forEach((r, i) => {
+    if (r.status !== 'fulfilled' || !r.value.exists()) return;
+    try { const data = copyFrom(JSON.parse(r.value.data().data)); if (data) found.push({ id: 'c' + i, label: 'Daily backup in the cloud', when: dowDate(days[i]), data }); } catch (e) {}
+  });
+  m.copies = m.copies.concat(found);
+  m.cloud = res.every(r => r.status === 'rejected') ? 'error' : 'done';
+  if (ui.modal === m) renderModal();
+}
+function pickCopy(copy) {
+  const miss = missingIn(copy.data);
+  const sel = {};
+  miss.tasks.forEach(t => { if (!t.done) sel['t:' + t.id] = true; });
+  miss.workouts.forEach(x => { sel['w:' + x.id] = true; });
+  ui.modal = { type: 'restore', step: 'pick', copy, miss, sel, showDone: false, back: ui.modal && ui.modal.step === 'list' ? ui.modal : null };
+}
+function restoreCount(m) { return Object.keys(m.sel).filter(k => m.sel[k]).length; }
+function restoreLabel(m) {
+  const k = Object.keys(m.sel).filter(x => m.sel[x]);
+  const nt = k.filter(x => x[0] === 't').length, nw = k.length - nt;
+  if (!k.length) return 'Restore';
+  return 'Restore ' + [nt ? plural(nt, 'task') : '', nw ? plural(nw, 'workout') : ''].filter(Boolean).join(' and ');
+}
+function doRestore() {
+  const m = ui.modal; if (!m || m.step !== 'pick') return;
+  const d = m.copy.data, cfg = normalizeConfig(d.config || {});
+  let nt = 0, nw = 0, cfgChanged = false;
+  Object.keys(m.sel).filter(k => m.sel[k]).forEach(k => {
+    if (k[0] === 't') {
+      const src = d.tasks[k.slice(2)]; if (!src || S.tasks[src.id]) return;
+      const t = clone(src);
+      if (t.subtab && SEC[t.section] && SEC[t.section].tabs && !findTab(t.section, t.subtab)) {
+        const tab = (cfg.subtabs[t.section] || []).find(x => x.id === t.subtab);
+        if (tab) { S.config.subtabs[t.section].push(clone(tab)); cfgChanged = true; } else t.subtab = null;
+      }
+      if (t.list && !listsOf(t.section, t.subtab).find(l => l.id === t.list)) {
+        const key = listKey(t.section, t.subtab), l = (cfg.lists[key] || []).find(x => x.id === t.list);
+        if (l) { S.config.lists = S.config.lists || {}; S.config.lists[key] = (S.config.lists[key] || []).concat([clone(l)]); cfgChanged = true; } else t.list = null;
+      }
+      S.tasks[t.id] = t; nt++;
+    } else {
+      const src = d.training[k.slice(2)]; if (!src || S.training[src.id]) return;
+      const x = clone(src);
+      if (x.series && !S.series[x.series] && d.series[x.series]) S.series[x.series] = clone(d.series[x.series]);
+      S.training[x.id] = x; nw++;
+    }
+  });
+  if (cfgChanged) queueSave('config');
+  if (nt) queueSave('tasks');
+  if (nw) queueSave('training');
+  ui.modal = null;
+  toast('Restored ' + [nt ? plural(nt, 'task') : '', nw ? plural(nw, 'workout') : ''].filter(Boolean).join(' and ') || 'nothing');
+}
+function restoreDialog(m) {
+  const head = '<div class="dialog wide" role="dialog" aria-modal="true" aria-labelledby="dlg-title"><h2 id="dlg-title">Restore tasks</h2>';
+  if (m.step === 'paste') {
+    return head + '<p class="dlg-sub">Paste data copied from another planner (for example, “Move or back up my data” in your old planner). Nothing here gets replaced; you choose what to add back.</p>' +
+      '<textarea id="restore-text" class="data-text" style="height:120px" placeholder="Paste the copied data here" aria-label="Data to compare"></textarea>' +
+      (m.error ? '<p class="signin-err" role="alert" style="margin:8px 0 0">' + esc(m.error) + '</p>' : '') +
+      '<div class="dlg-actions" style="margin-top:12px"><button type="button" class="btn ghost small" data-action="restore-back">Back</button><span class="grow"></span><button type="button" class="btn primary small" data-action="restore-compare">Find missing tasks</button></div></div>';
+  }
+  if (m.step === 'list') {
+    const rows = m.copies.map(c => {
+      const miss = missingIn(c.data), nw = miss.workouts.length;
+      const what = miss.open || nw ? [miss.open ? plural(miss.open, 'task') : '', nw ? plural(nw, 'workout') : ''].filter(Boolean).join(' and ') + ' you don’t have now'
+        : miss.tasks.length ? plural(miss.tasks.length, 'completed task') + ' you don’t have now' : 'Nothing missing';
+      const none = !miss.tasks.length && !nw;
+      return '<button type="button" class="rs-copy" data-action="restore-pick" data-id="' + c.id + '"' + (none ? ' disabled' : '') + '><span class="grow"><b>' + esc(c.when) + '</b><span class="rs-meta">' + esc(c.label) + '</span></span><span class="rs-count' + (miss.open ? ' hot' : '') + '">' + esc(what) + '</span></button>';
+    }).join('');
+    const cloudNote = m.cloud === 'loading' ? '<p class="dlg-text">Looking for cloud backups…</p>' : m.cloud === 'error' ? '<p class="dlg-text">Couldn’t load cloud backups.</p>' : '';
+    return head + '<p class="dlg-sub">Pick an earlier copy to see what’s in it that isn’t in your planner now. Restoring only adds things back; it never removes anything.</p>' +
+      (rows || (m.cloud === 'loading' ? '' : '<p class="dlg-text">No earlier copies yet. This device keeps one each time the planner opens, and the cloud keeps one a day.</p>')) + cloudNote +
+      '<div class="dlg-actions" style="margin-top:12px"><button type="button" class="btn ghost small" data-action="restore-paste">Paste a copy…</button><span class="grow"></span><button type="button" class="btn primary small" data-action="close-modal">Done</button></div></div>';
+  }
+  // pick
+  const d = m.copy.data, miss = m.miss;
+  const missing = new Map(miss.tasks.map(t => [t.id, t]));
+  const depth = t => { let n = 0, p = t; while (p.parent && missing.has(p.parent) && n < 8) { p = missing.get(p.parent); n++; } return n; };
+  const rootIn = t => { let p = t, g = 0; while (p.parent && missing.has(p.parent) && g++ < 60) p = missing.get(p.parent); return p; };
+  const shown = miss.tasks.filter(t => m.showDone || !t.done);
+  const groups = new Map();
+  shown.forEach(t => { const r = rootIn(t), g = placeIn(r, d); if (!groups.has(g)) groups.set(g, []); groups.get(g).push(t); });
+  const orderKey = t => { const chain = []; let p = t, g = 0; while (p && g++ < 60) { chain.unshift(String(p.order || 0).padStart(15, '0') + p.id); p = p.parent ? missing.get(p.parent) : null; } return chain.join('/'); };
+  const item = (key, text, sub, done, lvl) => '<label class="rs-item' + (done ? ' done' : '') + '" style="padding-left:' + (4 + lvl * 22) + 'px"><input type="checkbox" data-action="restore-toggle" data-key="' + key + '"' + (m.sel[key] ? ' checked' : '') + '><span>' + esc(text) + (sub ? ' <em>' + esc(sub) + '</em>' : '') + '</span></label>';
+  let html = '';
+  Array.from(groups.keys()).sort().forEach(g => {
+    html += '<div class="rs-group"><h4>' + esc(g) + '</h4>' + groups.get(g).sort((a, b) => orderKey(a) < orderKey(b) ? -1 : 1).map(t => {
+      const p = t.parent && !missing.has(t.parent) && S.tasks[t.parent] ? 'subtask of “' + S.tasks[t.parent].title + '”' : (t.due ? 'due ' + shortDate(t.due) : '');
+      return item('t:' + t.id, t.title, p, t.done, depth(t));
+    }).join('') + '</div>';
+  });
+  if (miss.workouts.length) {
+    const acts = (d.config && Array.isArray(d.config.activities) ? d.config.activities : []).concat(S.config.activities);
+    html += '<div class="rs-group"><h4>Workouts</h4>' + miss.workouts.slice().sort((a, b) => a.date < b.date ? -1 : 1).map(x => {
+      const a = acts.find(y => y.id === x.act);
+      return item('w:' + x.id, dowDate(x.date) + ' · ' + (a ? a.name : 'Workout') + (x.note ? ' · ' + x.note : ''), x.time ? fmtTime(x.time) : '', x.done, 0);
+    }).join('') + '</div>';
+  }
+  const nDone = miss.tasks.filter(t => t.done).length;
+  return head + '<p class="dlg-sub">' + esc(m.copy.label) + ' · ' + esc(m.copy.when) + '. These aren’t in your planner now. Uncheck anything you deleted on purpose.</p>' +
+    '<div class="rs-tools"><button type="button" class="link-btn" data-action="restore-all" data-val="1">Select all</button><button type="button" class="link-btn" data-action="restore-all" data-val="0">Select none</button>' +
+    (nDone ? '<span class="grow"></span><button type="button" class="link-btn" data-action="restore-show-done">' + (m.showDone ? 'Hide' : 'Show') + ' ' + plural(nDone, 'completed task') + '</button>' : '') + '</div>' +
+    '<div class="rs-list">' + (html || '<p class="dlg-text" style="margin:10px 0">Only completed tasks are missing from this copy.</p>') + '</div>' +
+    '<div class="dlg-actions"><button type="button" class="btn ghost small" data-action="restore-back">Back</button><span class="grow"></span><button type="button" class="btn primary small" id="restore-go" data-action="restore-do"' + (restoreCount(m) ? '' : ' disabled') + '>' + esc(restoreLabel(m)) + '</button></div></div>';
 }
 
 document.addEventListener('click', e => {
@@ -1610,6 +1951,29 @@ document.addEventListener('click', e => {
       S.config.groups = S.config.groups.filter(g => g.id !== id); queueSave('config'); break;
     }
     case 'open-data': ui.modal = { type: 'data' }; break;
+    case 'open-restore': openRestore(); break;
+    case 'restore-pick': { const c = ui.modal && ui.modal.copies && ui.modal.copies.find(x => x.id === id); if (c) pickCopy(c); break; }
+    case 'restore-back': ui.modal = ui.modal && ui.modal.back ? ui.modal.back : (openRestore(), ui.modal); break;
+    case 'restore-paste': ui.modal = { type: 'restore', step: 'paste', back: ui.modal }; break;
+    case 'restore-compare': {
+      const ta = $('#restore-text'); let raw = null;
+      try { raw = JSON.parse(String(ta ? ta.value : '').trim()); } catch (err) {}
+      const data = copyFrom(raw);
+      if (!data) { ui.modal.error = 'That doesn’t look like planner data. Copy it again and paste the whole thing.'; break; }
+      const back = ui.modal.back;
+      pickCopy({ id: 'p', label: 'Pasted copy', when: raw.exportedAt ? fmtWhen(Date.parse(raw.exportedAt)) : 'pasted just now', data });
+      ui.modal.back = back;
+      break;
+    }
+    case 'restore-toggle': {
+      const m = ui.modal; if (!m || !m.sel) return;
+      m.sel[el.dataset.key] = el.checked;
+      const go = $('#restore-go'); if (go) { go.textContent = restoreLabel(m); go.disabled = !restoreCount(m); }
+      return;
+    }
+    case 'restore-all': { const m = ui.modal; if (!m || !m.miss) break; const on = el.dataset.val === '1'; m.miss.tasks.forEach(t => { if (on ? (m.showDone || !t.done) : true) m.sel['t:' + t.id] = on; }); m.miss.workouts.forEach(x => { m.sel['w:' + x.id] = on; }); break; }
+    case 'restore-show-done': { const m = ui.modal; if (m) { m.showDone = !m.showDone; if (!m.showDone) m.miss.tasks.forEach(t => { if (t.done) m.sel['t:' + t.id] = false; }); } break; }
+    case 'restore-do': doRestore(); break;
     case 'copy-data': copyData(); return;
     case 'import-data': { const ta = $('#import-text'); importData(ta ? ta.value : ''); break; }
     case 'sign-out': doSignOut(); return;
@@ -1759,10 +2123,10 @@ function checkDay() {
   if (td === lastDay) return;
   if (ui.weekStart === mondayOf(lastDay)) ui.weekStart = mondayOf(td);
   lastDay = td;
-  if (canEdit()) { rollRecurring(); ensureSeries(); }
+  if (canEdit()) dayRoll(); else sync.rollPending = true;
   render();
 }
-setInterval(checkDay, 60000);
+setInterval(() => { checkDay(); if (sync.rollPending && canEdit()) dayRoll(); }, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkDay(); checkForUpdate(); } });
 
 /* ---- auto-update: reload when a newer version has been published ---- */
@@ -1778,7 +2142,7 @@ async function checkForUpdate() {
     let tried = null;
     try { tried = sessionStorage.getItem('kp-update-tried'); } catch (e) {}
     if (tried === j.v) return;
-    if (DOCS.some(w => sync.dirty[w] || sync.pending[w] > 0)) { setTimeout(checkForUpdate, 2000); return; }
+    if (DOCS.some(w => sync.dirty[w] || sync.inflight[w])) { setTimeout(checkForUpdate, 2000); return; }
     try { sessionStorage.setItem('kp-update-tried', j.v); } catch (e) {}
     const base = location.href.split('#')[0].split('?')[0];
     const urls = base.endsWith('/') ? [base, base + 'index.html'] : [base];
